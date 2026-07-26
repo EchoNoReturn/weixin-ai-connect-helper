@@ -1,0 +1,26 @@
+{
+  "onReceive": [
+    {
+      "name": "message-filter",
+      "enabled": true,
+      "entry": "@yoyojcoder-weixin-ai/plugins/src/message-filter.ts"
+    }
+  ],
+  "onRoute": [],
+  "beforePrompt": [
+    {
+      "name": "system-prompt",
+      "enabled": true,
+      "entry": "@yoyojcoder-weixin-ai/plugins/src/system-prompt.ts"
+    }
+  ],
+  "onPrompt": [],
+  "onSessionEnd": [
+    {
+      "name": "session-notify",
+      "enabled": false,
+      "entry": "@yoyojcoder-weixin-ai/plugins/src/session-notify.ts"
+    }
+  ],
+  "beforeSend": []
+}
