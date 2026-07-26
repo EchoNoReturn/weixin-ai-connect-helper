@@ -1,0 +1,11 @@
+{
+  "name": "@yoyojcoder-weixin-ai/agent",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@yoyojcoder-weixin-ai/core": "workspace:*",
+    "@agentclientprotocol/sdk": "^1.1.0"
+  }
+}
