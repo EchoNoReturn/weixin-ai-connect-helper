@@ -1,20 +1,34 @@
 {
   "name": "weixin-ai-connect-helper",
-  "module": "index.ts",
-  "type": "module",
+  "version": "0.1.0",
   "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "app/*"],
   "scripts": {
-    "start": "bun run index.ts",
-    "test:acp": "bun run scripts/test-acp.ts"
-  },
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
+    "start": "bun run src/cli/index.ts start",
+    "dev": "bun run src/cli/index.ts start",
+    "cli": "bun run src/cli/index.ts",
+    "login": "bun run src/cli/index.ts auth login",
+    "logout": "bun run src/cli/index.ts auth logout",
+    "stop": "bun run src/cli/index.ts stop",
+    "dev:web": "bun run --filter @yoyojcoder-weixin-ai/web dev",
+    "build:web": "bun run --filter @yoyojcoder-weixin-ai/web build",
+    "build": "bun build --compile src/cli/index.ts --outfile dist/wah --packages external",
+    "test:acp": "bun run scripts/test-acp.ts",
+    "test": "bun test packages/ scripts/",
+    "test:unit": "bun test packages/",
+    "test:integration": "bun run scripts/test-integration.ts",
+    "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.1.0",
-    "@tencent-weixin/openclaw-weixin": "^2.4.6"
+    "@tencent-weixin/openclaw-weixin": "^2.4.6",
+    "commander": "^15.0.0",
+    "mri": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/mri": "^1.2.0",
+    "typescript": "^5"
   }
 }
