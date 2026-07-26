@@ -12,7 +12,7 @@ const DEFAULTS: BridgeConfig = {
     },
   },
   autoApprove: true,
-  webPort: 3210,
+  webPort: 5173,
   pluginsFile: "plugins.json",
   streamFlushMinChars: 200,
   streamFlushIdleMs: 3000,
