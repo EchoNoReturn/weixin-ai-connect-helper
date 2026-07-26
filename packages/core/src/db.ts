@@ -1,10 +1,10 @@
-import Database from "better-sqlite3";
+import { Database } from "bun:sqlite";
 import path from "node:path";
 import os from "node:os";
 
-let db: Database.Database | null = null;
+let db: Database | null = null;
 
-export function getDb(): Database.Database {
+export function getDb(): Database {
   if (db) return db;
 
   const stateDir = process.env.BRIDGE_STATE_DIR?.trim() || path.join(os.homedir(), ".weixin-ai-connect-helper");
@@ -12,7 +12,7 @@ export function getDb(): Database.Database {
 
   const dbPath = path.join(stateDir, "bridge.db");
   db = new Database(dbPath);
-  db.pragma("journal_mode = WAL");
+  db.exec("PRAGMA journal_mode = WAL");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (

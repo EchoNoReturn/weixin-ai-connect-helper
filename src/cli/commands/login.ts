@@ -1,3 +1,4 @@
+import "../../env.ts";
 import { ensureWeixinLogin } from "@yoyojcoder-weixin-ai/transport";
 import { createLogger } from "@yoyojcoder-weixin-ai/core";
 

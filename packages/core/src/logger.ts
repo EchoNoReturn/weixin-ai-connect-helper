@@ -1,3 +1,7 @@
+import path from "node:path";
+import os from "node:os";
+import fs from "node:fs";
+
 type LogFn = (msg: string, ...args: unknown[]) => void;
 
 export interface Logger {
@@ -18,6 +22,57 @@ const COLORS: Record<Level, string> = {
 };
 const RESET = "\x1b[0m";
 
+const LOGS_DIR = path.join(os.tmpdir(), "weixin-ai-connect-helper", "logs");
+
+let logFile: string | null = null;
+let logStream: fs.WriteStream | null = null;
+
+function getDateStr(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function getLogFile(): string {
+  return path.join(LOGS_DIR, `${getDateStr()}.log`);
+}
+
+function ensureLogDirSync(): void {
+  fs.mkdirSync(LOGS_DIR, { recursive: true });
+}
+
+function getLogStream(): fs.WriteStream | null {
+  try {
+    const file = getLogFile();
+    if (logFile === file && logStream) return logStream;
+
+    // 日期变了，关闭旧流
+    if (logStream) {
+      logStream.end();
+    }
+
+    ensureLogDirSync();
+    logFile = file;
+    logStream = fs.createWriteStream(file, { flags: "a" });
+    return logStream;
+  } catch {
+    return null;
+  }
+}
+
+function writeToFile(level: Level, scope: string, msg: string, args: unknown[]): void {
+  try {
+    const ts = new Date().toISOString();
+    const line = `[${ts}] [${level.toUpperCase()}] [${scope}] ${msg} ${args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ")}\n`;
+    const stream = getLogStream();
+    stream?.write(line);
+  } catch {
+    // 忽略写入错误
+  }
+}
+
 function createLogFn(level: Level, scope: string): LogFn {
   return (msg: string, ...args: unknown[]) => {
     const ts = new Date().toISOString().slice(11, 19);
@@ -29,6 +84,7 @@ function createLogFn(level: Level, scope: string): LogFn {
     } else {
       console.log(prefix, msg, ...args);
     }
+    writeToFile(level, scope, msg, args);
   };
 }
 
@@ -39,4 +95,12 @@ export function createLogger(scope: string): Logger {
     warn: createLogFn("warn", scope),
     error: createLogFn("error", scope),
   };
+}
+
+export async function initFileLogging(): Promise<string> {
+  ensureLogDirSync();
+  const file = getLogFile();
+  // 触发流创建
+  getLogStream();
+  return file;
 }

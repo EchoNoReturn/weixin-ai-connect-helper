@@ -64,7 +64,6 @@ export {
   listIndexedWeixinAccountIds,
   loadWeixinAccount,
   registerWeixinAccountId,
-  unregisterWeixinAccountId,
   saveWeixinAccount,
 } from "@tencent-weixin/openclaw-weixin/dist/src/auth/accounts.js";
 

@@ -1,4 +1,4 @@
-export { ensureWeixinLogin, type WeixinCredentials } from "./weixin/login.ts";
+export { ensureWeixinLogin, checkWeixinCredentials, type WeixinCredentials } from "./weixin/login.ts";
 export { runInboundLoop } from "./weixin/inbound.ts";
 export { WeixinOutbound } from "./weixin/outbound.ts";
 export {
@@ -9,7 +9,6 @@ export {
   loadWeixinAccount,
   saveWeixinAccount,
   registerWeixinAccountId,
-  unregisterWeixinAccountId,
   getSyncBufFilePath,
   loadGetUpdatesBuf,
   saveGetUpdatesBuf,

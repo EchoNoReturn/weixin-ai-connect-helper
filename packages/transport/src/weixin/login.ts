@@ -19,6 +19,24 @@ export interface WeixinCredentials {
 
 const LOGIN_TIMEOUT_MS = 480_000;
 
+/**
+ * 检查是否有可用的登录凭证（不触发扫码登录）。
+ * 返回凭证或 null。
+ */
+export function checkWeixinCredentials(): WeixinCredentials | null {
+  const existingId = listIndexedWeixinAccountIds()[0];
+  if (!existingId) return null;
+
+  const acc = loadWeixinAccount(existingId);
+  if (!acc?.token) return null;
+
+  return {
+    accountId: existingId,
+    token: acc.token,
+    baseUrl: acc.baseUrl?.trim() || DEFAULT_BASE_URL,
+  };
+}
+
 export async function ensureWeixinLogin(): Promise<WeixinCredentials> {
   const existingId = listIndexedWeixinAccountIds()[0];
   if (existingId) {

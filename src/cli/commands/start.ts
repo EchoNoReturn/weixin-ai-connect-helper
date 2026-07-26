@@ -1,6 +1,8 @@
+import "../../env.ts";
 import { startBridge } from "../../bridge.ts";
 import { loadConfig } from "../../config.ts";
-import { createLogger } from "@yoyojcoder-weixin-ai/core";
+import { createLogger, initFileLogging } from "@yoyojcoder-weixin-ai/core";
+import { checkWeixinCredentials } from "@yoyojcoder-weixin-ai/transport";
 import { writePid, clearPid, writeHealth, clearHealth, isRunning, getPidPath } from "../daemon.ts";
 
 export interface StartOptions {
@@ -16,6 +18,16 @@ export async function execStart(opts: StartOptions): Promise<void> {
     process.exit(1);
   }
 
+  // 检查登录凭证是否可用
+  const creds = checkWeixinCredentials();
+  if (!creds) {
+    console.error("未找到有效的登录凭证");
+    console.error("请先运行 wah login 进行微信扫码登录");
+    process.exit(1);
+  }
+
+  console.log(`使用已登录账号: ${creds.accountId}`);
+
   if (opts.foreground) {
     await runForeground(opts);
   } else {
@@ -24,7 +36,10 @@ export async function execStart(opts: StartOptions): Promise<void> {
 }
 
 async function runForeground(opts: StartOptions): Promise<void> {
+  const logFile = await initFileLogging();
   const log = createLogger("cli");
+  log.info(`日志文件: ${logFile}`);
+
   const config = await loadConfig();
   if (opts.port) config.webPort = opts.port;
 
@@ -73,7 +88,7 @@ async function runForeground(opts: StartOptions): Promise<void> {
 function runBackground(opts: StartOptions): void {
   // 检测当前运行的是编译后的二进制还是 TS 源码
   const isCompiled = !process.argv[1]?.endsWith(".ts");
-  const self = isCompiled ? process.argv[0] : "bun";
+  const self = isCompiled ? process.argv[0]! : "bun";
   const args = isCompiled
     ? ["start", "--foreground"]
     : ["src/cli/index.ts", "start", "--foreground"];

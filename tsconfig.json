@@ -17,6 +17,6 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
-    "types": ["bun", "mri", "better-sqlite3"]
+    "types": ["bun", "mri"]
   }
 }
