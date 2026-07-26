@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
@@ -8,7 +9,7 @@ export function getDb(): Database {
   if (db) return db;
 
   const stateDir = process.env.BRIDGE_STATE_DIR?.trim() || path.join(os.homedir(), ".weixin-ai-connect-helper");
-  Bun.spawnSync(["mkdir", "-p", stateDir]);
+  mkdirSync(stateDir, { recursive: true });
 
   const dbPath = path.join(stateDir, "bridge.db");
   db = new Database(dbPath);

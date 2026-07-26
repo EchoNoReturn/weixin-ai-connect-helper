@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
@@ -9,7 +10,7 @@ export function getPidPath(): string { return PID_FILE; }
 export function getHealthPath(): string { return HEALTH_FILE; }
 
 export function writePid(pid: number): void {
-  Bun.spawnSync(["mkdir", "-p", STATE_DIR]);
+  mkdirSync(STATE_DIR, { recursive: true });
   Bun.write(PID_FILE, String(pid));
 }
 
@@ -48,7 +49,7 @@ export interface HealthData {
 }
 
 export function writeHealth(data: HealthData): void {
-  Bun.spawnSync(["mkdir", "-p", STATE_DIR]);
+  mkdirSync(STATE_DIR, { recursive: true });
   Bun.write(HEALTH_FILE, JSON.stringify(data, null, 2));
 }
 
