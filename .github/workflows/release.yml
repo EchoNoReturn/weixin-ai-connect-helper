@@ -59,8 +59,12 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Verify workspace links
-        run: ls -la node_modules/@yoyojcoder-weixin-ai/
+      - name: Debug node_modules
+        run: |
+          echo "=== node_modules/@yoyojcoder-weixin-ai ==="
+          ls -la node_modules/@yoyojcoder-weixin-ai/ 2>&1 || echo "Directory not found"
+          echo "=== node_modules ==="
+          ls node_modules/ | head -20
 
       - name: Build main program
         run: bun build --compile --target=${{ matrix.bun_target }} src/cli/index.ts --outfile dist/wah
