@@ -65,8 +65,11 @@ jobs:
           mkdir -p node_modules/@yoyojcoder-weixin-ai
           for pkg in packages/*/; do
             pkg_name=$(jq -r '.name' "$pkg/package.json")
+            pkg_short=$(basename "$pkg")
+            link_path="node_modules/$pkg_name"
             echo "Linking $pkg_name -> $pkg"
-            ln -sf "../../$pkg" "node_modules/$pkg_name"
+            rm -rf "$link_path"
+            ln -sf "../../$pkg" "$link_path"
           done
           ls -la node_modules/@yoyojcoder-weixin-ai/
 
