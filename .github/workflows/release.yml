@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            artifact_name: wah-linux-amd64
+            pgh_name: pgh
+            bun_target: bun-linux-x64
+          - os: macos-13
+            goos: darwin
+            goarch: amd64
+            artifact_name: wah-darwin-amd64
+            pgh_name: pgh
+            bun_target: bun-darwin-x64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            artifact_name: wah-darwin-arm64
+            pgh_name: pgh
+            bun_target: bun-darwin-arm64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            artifact_name: wah-windows-amd64.exe
+            pgh_name: pgh.exe
+            bun_target: bun-windows-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build main program
+        run: bun build --compile --target=${{ matrix.bun_target }} src/cli/index.ts --outfile dist/wah
+
+      - name: Build pgh
+        run: |
+          mkdir -p tool/pgh/dist
+          cd tool/pgh
+          go build -o dist/${{ matrix.pgh_name }} .
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+
+      - name: Package (unix)
+        if: matrix.goos != 'windows'
+        run: |
+          mkdir -p dist/release
+          cp dist/wah dist/release/
+          cp tool/pgh/dist/${{ matrix.pgh_name }} dist/release/
+          chmod +x dist/release/*
+          cd dist
+          tar -czf ${{ matrix.artifact_name }}.tar.gz -C release .
+          mv ${{ matrix.artifact_name }}.tar.gz ../
+
+      - name: Package (windows)
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/release
+          Copy-Item dist/wah.exe dist/release/
+          Copy-Item tool/pgh/dist/${{ matrix.pgh_name }} dist/release/
+          cd dist
+          Compress-Archive -Path release/* -DestinationPath ${{ matrix.artifact_name }}.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}.*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Release ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.zip
