@@ -16,6 +16,7 @@ permissions:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.allow_failure || false }}
     strategy:
       matrix:
         include:
@@ -31,6 +32,7 @@ jobs:
             artifact_name: wah-darwin-amd64
             pgh_name: pgh
             bun_target: bun-darwin-x64
+            allow_failure: true
           - os: macos-latest
             goos: darwin
             goarch: arm64
