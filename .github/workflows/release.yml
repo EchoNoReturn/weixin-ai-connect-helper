@@ -91,6 +91,8 @@ jobs:
           mkdir -p dist/release
           cp dist/wah dist/release/
           cp tool/pgh/dist/${{ matrix.pgh_name }} dist/release/
+          cp package.json dist/release/
+          cp plugins.json dist/release/
           chmod +x dist/release/*
           cd dist
           tar -czf ${{ matrix.artifact_name }}.tar.gz -C release .
@@ -103,6 +105,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist/release
           Copy-Item dist/wah.exe dist/release/
           Copy-Item tool/pgh/dist/${{ matrix.pgh_name }} dist/release/
+          Copy-Item package.json dist/release/
+          Copy-Item plugins.json dist/release/
           cd dist
           Compress-Archive -Path release/* -DestinationPath ${{ matrix.artifact_name }}.zip
 
