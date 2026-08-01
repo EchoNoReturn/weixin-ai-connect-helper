@@ -16,7 +16,6 @@ permissions:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.allow_failure || false }}
     strategy:
       matrix:
         include:
@@ -26,13 +25,13 @@ jobs:
             artifact_name: wah-linux-amd64
             pgh_name: pgh
             bun_target: bun-linux-x64
-          - os: macos-13
-            goos: darwin
-            goarch: amd64
-            artifact_name: wah-darwin-amd64
-            pgh_name: pgh
-            bun_target: bun-darwin-x64
-            allow_failure: true
+          # macOS Intel 需要自备 runner 或本地编译
+          # - os: macos-13
+          #   goos: darwin
+          #   goarch: amd64
+          #   artifact_name: wah-darwin-amd64
+          #   pgh_name: pgh
+          #   bun_target: bun-darwin-x64
           - os: macos-latest
             goos: darwin
             goarch: arm64
@@ -67,7 +66,6 @@ jobs:
           mkdir -p node_modules/@yoyojcoder-weixin-ai
           for pkg in packages/*/; do
             pkg_name=$(jq -r '.name' "$pkg/package.json")
-            pkg_short=$(basename "$pkg")
             link_path="node_modules/$pkg_name"
             echo "Linking $pkg_name -> $pkg"
             rm -rf "$link_path"
@@ -112,7 +110,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_name }}.*
+          path: dist/${{ matrix.artifact_name }}.*
 
   release:
     needs: build
@@ -132,7 +130,77 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           name: Release ${{ github.event.inputs.tag || github.ref_name }}
-          generate_release_notes: true
+          body: |
+            ## WeChat AI Connect Helper ${{ github.event.inputs.tag || github.ref_name }}
+
+            > ⚠️ **Beta 版本说明**：此版本为早期测试版，可能存在不稳定因素。
+
+            ### 📦 下载说明
+
+            根据你的操作系统选择对应的包：
+
+            | 文件 | 系统 | 架构 | 说明 |
+            |------|------|------|------|
+            | `wah-linux-amd64.tar.gz` | Linux | x86_64 | 适用于大多数 Linux 发行版 |
+            | `wah-darwin-arm64.tar.gz` | macOS | Apple Silicon (M1/M2/M3) | 适用于 Apple 芯片 Mac |
+            | `wah-windows-amd64.exe.zip` | Windows | x86_64 | 适用于 Windows 10/11 |
+
+            > 💡 **macOS Intel 用户**：目前暂未提供 Intel Mac 预编译版本，请参考下方「从源码构建」章节自行编译。
+
+            ### 🚀 快速开始
+
+            1. 下载对应平台的压缩包并解压
+            2. 将解压后的文件放入 PATH 目录，或直接在当前目录运行
+            3. 首次运行会显示二维码，使用微信扫码登录
+            4. 登录成功后，通过微信发送消息即可与 AI 交互
+
+            ### 🔧 从源码构建
+
+            如果预编译版本不满足需求，可自行从源码构建：
+
+            ```bash
+            # 克隆仓库
+            git clone https://github.com/EchoNoReturn/weixin-ai-connect-helper.git
+            cd weixin-ai-connect-helper
+
+            # 安装依赖
+            bun install
+
+            # 构建主程序
+            bun run build
+
+            # 构建 pgh (进程管理器)
+            bun run build:pgh
+
+            # 运行
+            ./dist/wah start
+            ```
+
+            ### ⚙️ 配置
+
+            首次运行后会在用户目录下创建配置文件 `~/.weixin-ai-connect-helper/bridge.config.json`，可按需修改：
+
+            ```jsonc
+            {
+              "allowFrom": [],           // 允许使用的微信用户ID列表，留空则自动绑定第一个发消息的用户
+              "defaultAgent": "opencode", // 默认使用的 AI Agent
+              "autoApprove": true         // 自动批准 Agent 的工具调用请求
+            }
+            ```
+
+            ### 📝 已知限制
+
+            - macOS Intel 版本需要自行从源码构建
+            - Beta 版本可能存在稳定性问题
+            - 部分 AI Agent 功能可能需要额外配置
+
+            ### 🐛 问题反馈
+
+            如遇到问题，请在 [Issues](https://github.com/EchoNoReturn/weixin-ai-connect-helper/issues) 中反馈。
+
+            ---
+
+            **Full Changelog**: https://github.com/EchoNoReturn/weixin-ai-connect-helper/commits/${{ github.event.inputs.tag || github.ref_name }}
           files: |
             artifacts/*.tar.gz
             artifacts/*.zip
