@@ -59,12 +59,16 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Debug node_modules
+      - name: Link workspace packages
         run: |
-          echo "=== node_modules/@yoyojcoder-weixin-ai ==="
-          ls -la node_modules/@yoyojcoder-weixin-ai/ 2>&1 || echo "Directory not found"
-          echo "=== node_modules ==="
-          ls node_modules/ | head -20
+          mkdir -p node_modules/@yoyojcoder-weixin-ai
+          for pkg in packages/*/; do
+            pkg_name=$(jq -r '.name' "$pkg/package.json")
+            pkg_short=$(basename "$pkg")
+            echo "Linking $pkg_name -> $pkg"
+            ln -sf "../../$pkg" "node_modules/$pkg_name"
+          done
+          ls -la node_modules/@yoyojcoder-weixin-ai/
 
       - name: Build main program
         run: bun build --compile --target=${{ matrix.bun_target }} src/cli/index.ts --outfile dist/wah
