@@ -4,6 +4,7 @@ import { loadConfig } from "../../config.ts";
 import { createLogger, initFileLogging } from "@yoyojcoder-weixin-ai/core";
 import { checkWeixinCredentials } from "@yoyojcoder-weixin-ai/transport";
 import { writePid, clearPid, writeHealth, clearHealth, isRunning, getPidPath } from "../daemon.ts";
+import { ensurePghDev, getPghPath } from "../pgh.ts";
 
 export interface StartOptions {
   port?: number;
@@ -27,6 +28,11 @@ export async function execStart(opts: StartOptions): Promise<void> {
   }
 
   console.log(`使用已登录账号: ${creds.accountId}`);
+
+  // 确保 pgh 工具可用（开发阶段自动打包，仅后台模式需要）
+  if (!opts.foreground) {
+    ensurePghDev();
+  }
 
   if (opts.foreground) {
     await runForeground(opts);
@@ -87,33 +93,39 @@ async function runForeground(opts: StartOptions): Promise<void> {
 }
 
 function runBackground(opts: StartOptions): void {
-  // 检测当前运行的是编译后的二进制还是 TS 源码
-  const isCompiled = !process.argv[1]?.endsWith(".ts");
-  const self = isCompiled ? process.argv[0]! : "bun";
-  const args = isCompiled
-    ? ["start", "--foreground"]
-    : ["src/cli/index.ts", "start", "--foreground"];
-
-  if (opts.noWeb) args.push("--no-web");
-  if (opts.port) args.push("--port", String(opts.port));
-
+  const pghPath = getPghPath();
+  
+  // 构建要执行的命令
+  const command = process.argv[1]?.endsWith(".ts") ? "bun" : (process.argv[0] || "bun");
+  const commandArgs = process.argv[1]?.endsWith(".ts") 
+    ? ["src/cli/index.ts", "start", "--foreground"]
+    : ["start", "--foreground"];
+  
+  if (opts.noWeb) commandArgs.push("--no-web");
+  if (opts.port) commandArgs.push("--port", String(opts.port));
+  
   const stateDir = process.env.BRIDGE_STATE_DIR
     ? process.env.BRIDGE_STATE_DIR
-    : `${process.env.HOME}/.weixin-ai-connect-helper`;
+    : `${process.env.HOME || process.env.USERPROFILE}/.weixin-ai-connect-helper`;
 
-  // detached + stdio: ignore → 跨平台后台运行
-  const child = Bun.spawn([self, ...args], {
-    stdout: "ignore",
-    stderr: "ignore",
-    stdin: "ignore",
-    env: { ...process.env, BRIDGE_STATE_DIR: stateDir },
-    detached: true,
-  } as any);
+  try {
+    // 使用 pgh 启动后台进程
+    const child = Bun.spawn([pghPath, "start", "-f", `${stateDir}/bridge.pid`, command, ...commandArgs], {
+      stdout: "ignore",
+      stderr: "ignore",
+      stdin: "ignore",
+      env: { ...process.env, BRIDGE_STATE_DIR: stateDir },
+      detached: true,
+    } as any);
 
-  child.unref();
+    child.unref();
 
-  console.log(`桥已在后台启动 (PID: ${child.pid})`);
-  console.log(`停止: wah stop`);
-  console.log(`状态: wah status`);
-  process.exit(0);
+    console.log(`桥已在后台启动 (PID: ${child.pid})`);
+    console.log(`停止: wah stop`);
+    console.log(`状态: wah status`);
+    process.exit(0);
+  } catch (error) {
+    console.error("pgh 启动失败:", error);
+    process.exit(1);
+  }
 }
