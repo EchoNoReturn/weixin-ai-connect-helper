@@ -93,6 +93,7 @@ jobs:
           cp tool/pgh/dist/${{ matrix.pgh_name }} dist/release/
           cp package.json dist/release/
           cp plugins.json dist/release/
+          cp bridge.config.json dist/release/ 2>/dev/null || true
           chmod +x dist/release/*
           cd dist
           tar -czf ${{ matrix.artifact_name }}.tar.gz -C release .
@@ -107,6 +108,7 @@ jobs:
           Copy-Item tool/pgh/dist/${{ matrix.pgh_name }} dist/release/
           Copy-Item package.json dist/release/
           Copy-Item plugins.json dist/release/
+          if (Test-Path bridge.config.json) { Copy-Item bridge.config.json dist/release/ }
           cd dist
           Compress-Archive -Path release/* -DestinationPath ${{ matrix.artifact_name }}.zip
 
