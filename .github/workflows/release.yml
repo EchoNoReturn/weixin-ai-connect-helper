@@ -60,11 +60,11 @@ jobs:
         run: bun install
 
       - name: Link workspace packages
+        shell: bash
         run: |
           mkdir -p node_modules/@yoyojcoder-weixin-ai
           for pkg in packages/*/; do
             pkg_name=$(jq -r '.name' "$pkg/package.json")
-            pkg_short=$(basename "$pkg")
             echo "Linking $pkg_name -> $pkg"
             ln -sf "../../$pkg" "node_modules/$pkg_name"
           done
