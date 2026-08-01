@@ -183,8 +183,7 @@ bun run build
 ```
 
 打包方式：`bun build --compile` 将 TypeScript 源码编译为二进制，npm 包标记为 external（运行时从 `node_modules/` 加载）。
-bun run typecheck
-```
+
 
 ## 项目结构
 
