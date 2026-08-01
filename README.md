@@ -12,12 +12,59 @@
 
 ## 环境要求
 
-- [Bun](https://bun.sh) ≥ 1.1
+- [Bun](https://bun.sh) ≥ 1.1（从源码安装时需要）
 - Node.js 18+（部分依赖需要）
 - 微信 bot 账号（首次启动扫码登录）
 - 已安装的 Agent 工具（opencode / claude-code / codex）
 
-## 安装
+## 快速安装（推荐）
+
+### macOS / Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main/install.sh | bash
+```
+
+安装脚本会自动：
+- 检测你的系统架构（Intel/Apple Silicon）
+- 下载最新版本
+- 安装到 `~/.local/bin` 目录
+
+自定义安装目录：
+```bash
+INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main/install.sh | bash
+```
+
+卸载：
+```bash
+~/.local/bin/wah uninstall
+# 或
+curl -fsSL https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main/install.sh | bash -s -- --uninstall
+```
+
+### Windows
+
+在 PowerShell 中运行：
+```powershell
+irm https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main/install.ps1 | iex
+```
+
+卸载：
+```powershell
+~\AppData\Local\wah\wah.exe uninstall
+```
+
+### 手动安装
+
+从 [Releases](https://github.com/EchoNoReturn/weixin-ai-connect-helper/releases) 页面下载对应平台的压缩包，解压后将可执行文件放入 PATH 目录。
+
+| 文件 | 系统 | 架构 |
+|------|------|------|
+| `wah-linux-amd64.tar.gz` | Linux | x86_64 |
+| `wah-darwin-arm64.tar.gz` | macOS | Apple Silicon (M1/M2/M3) |
+| `wah-windows-amd64.exe.zip` | Windows | x86_64 |
+
+## 从源码安装
 
 ```bash
 # 克隆仓库
@@ -38,49 +85,65 @@ ln -sf ../../packages/plugins node_modules/@yoyojcoder-weixin-ai/plugins
 
 ## 快速开始
 
-```bash
-# 冒烟测试：不依赖微信，直接驱动 opencode acp 回答一个问题
-bun run test:acp
+### 首次使用
 
-# 启动桥（首次运行会在终端打印微信登录二维码，扫码后常驻）
-bun start
+```bash
+# 1. 启动服务（首次运行会显示微信登录二维码）
+wah start
+
+# 2. 用微信扫描终端中的二维码完成登录
 ```
 
-## CLI 使用
-
-主程序通过 CLI 管理，使用 `bun run cli` 调用：
+### 命令行使用
 
 ```bash
 # 查看帮助
-bun run cli --help
+wah --help
+
+# 查看版本
+wah --version
 
 # 启动桥接服务（默认同时启动 Web 控制台）
-bun run cli start
+wah start
+
+# 前台运行（调试用）
+wah start --foreground
 
 # 只启动桥，不开 Web 控制台
-bun run cli start --no-web
+wah start --no-web
 
 # 指定 Web 控制台端口
-bun run cli start --port 8080
+wah start --port 8080
 
 # 查看连接状态
-bun run cli status
+wah status
 
-# 重新扫码登录微信
-bun run cli login
+# 停止服务
+wah stop
+
+# 重启服务
+wah restart
+
+# 登录/重新登录微信
+wah auth login
+
+# 登出微信
+wah auth logout
 ```
+
+> 💡 **从源码运行时**，使用 `bun start` 或 `bun run cli` 代替 `wah`
 
 ### 插件管理
 
 ```bash
 # 列出已注册插件及状态
-bun run cli plugins list
+wah plugins list
 
 # 启用插件
-bun run cli plugins enable session-notify
+wah plugins enable session-notify
 
 # 禁用插件
-bun run cli plugins disable session-notify
+wah plugins disable session-notify
 ```
 
 ## 在微信中使用
