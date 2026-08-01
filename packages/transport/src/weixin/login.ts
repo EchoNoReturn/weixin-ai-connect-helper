@@ -12,17 +12,31 @@ import {
 } from "./api.ts";
 
 export interface WeixinCredentials {
-  /** 规范化后的 bot 账号 ID，如 "b0f5860fdecb-im-bot" */
   accountId: string;
   token: string;
   baseUrl: string;
 }
 
-const LOGIN_TIMEOUT_MS = 480_000; // 8 分钟扫码窗口，对齐原插件
+const LOGIN_TIMEOUT_MS = 480_000;
 
 /**
- * 确保微信侧已登录：优先复用已保存的账号，否则走终端扫码流程。
+ * 检查是否有可用的登录凭证（不触发扫码登录）。
+ * 返回凭证或 null。
  */
+export function checkWeixinCredentials(): WeixinCredentials | null {
+  const existingId = listIndexedWeixinAccountIds()[0];
+  if (!existingId) return null;
+
+  const acc = loadWeixinAccount(existingId);
+  if (!acc?.token) return null;
+
+  return {
+    accountId: existingId,
+    token: acc.token,
+    baseUrl: acc.baseUrl?.trim() || DEFAULT_BASE_URL,
+  };
+}
+
 export async function ensureWeixinLogin(): Promise<WeixinCredentials> {
   const existingId = listIndexedWeixinAccountIds()[0];
   if (existingId) {

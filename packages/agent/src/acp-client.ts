@@ -1,25 +1,17 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
-import type { AgentConfig } from "../config.ts";
+import type { AgentConfig } from "@yoyojcoder-weixin-ai/core";
 
 export interface PromptResult {
-  /** 本轮 agent 输出的完整文本（agent_message_chunk 累加） */
   text: string;
   stopReason: string;
 }
 
-/** 流式回调：每次 agent_message_chunk 到达时给出当前完整文本 */
 export type ChunkHandler = (fullText: string) => void;
 
-/**
- * 一个 ACP agent 子进程（如 `opencode acp`）的封装：
- * 持有长连接，按 userKey 维护多轮会话，prompt 串行执行。
- */
 export class AcpAgent {
-  /** userKey → ACP 会话（同一用户对同一 agent 是连续对话） */
   private sessions = new Map<string, acp.ActiveSession>();
-  /** userKey → 串行队列，避免同一用户的 prompt 并发交错 */
   private queues = new Map<string, Promise<unknown>>();
 
   private constructor(
@@ -35,13 +27,13 @@ export class AcpAgent {
     opts: { autoApprove: boolean },
   ): Promise<AcpAgent> {
     const proc = spawn(cfg.command, cfg.args, {
-      stdio: ["pipe", "pipe", "inherit"], // agent 的 stderr 直接透传到桥的终端
+      stdio: ["pipe", "pipe", "inherit"],
       env: process.env,
       cwd: cfg.cwd,
     });
     proc.on("error", (err) => console.error(`[acp:${id}] 进程错误:`, err));
     proc.on("exit", (code) =>
-      console.error(`[acp:${id}] 进程退出 code=${code}（后续 prompt 会失败，需重启桥）`),
+      console.error(`[acp:${id}] 进程退出 code=${code}`),
     );
 
     const stream = acp.ndJsonStream(
@@ -68,7 +60,6 @@ export class AcpAgent {
     const conn = app.connect(stream);
     const init = await conn.agent.request(acp.methods.agent.initialize, {
       protocolVersion: acp.PROTOCOL_VERSION,
-      // 不代理 fs/terminal：agent 用自己的工具直接操作本机
       clientCapabilities: {
         fs: { readTextFile: false, writeTextFile: false },
         terminal: false,
@@ -80,15 +71,11 @@ export class AcpAgent {
     return new AcpAgent(id, cfg, proc, conn);
   }
 
-  /**
-   * 发送一条用户消息并等待本轮完成。
-   * 同一 userKey 的多次调用自动串行排队。
-   */
   prompt(userKey: string, text: string, onChunk: ChunkHandler): Promise<PromptResult> {
     const prev = this.queues.get(userKey) ?? Promise.resolve();
     const current = prev.then(
       () => this.runTurn(userKey, text, onChunk),
-      () => this.runTurn(userKey, text, onChunk), // 前序失败不阻塞后续
+      () => this.runTurn(userKey, text, onChunk),
     );
     this.queues.set(userKey, current);
     return current;
@@ -124,9 +111,8 @@ export class AcpAgent {
         full += update.content.text;
         onChunk(full);
       }
-      // tool_call / plan / thought 等更新 PoC 阶段忽略（见 DESIGN.md §4.4）
     }
-    await promptPromise; // 传播可能的 reject
+    await promptPromise;
     return { text: full, stopReason };
   }
 

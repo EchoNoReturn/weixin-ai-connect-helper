@@ -7,12 +7,7 @@ import {
 } from "./api.ts";
 import type { GetUpdatesResp, WeixinMessage } from "./api.ts";
 import type { WeixinCredentials } from "./login.ts";
-
-export interface InboundTextMessage {
-  fromUserId: string;
-  text: string;
-  contextToken?: string;
-}
+import type { ParsedMessage } from "@yoyojcoder-weixin-ai/core";
 
 const LONG_POLL_TIMEOUT_MS = 35_000;
 const MAX_CONSECUTIVE_FAILURES = 3;
@@ -35,17 +30,10 @@ function isUserTextMessage(msg: WeixinMessage): boolean {
   );
 }
 
-/**
- * getUpdates 长轮询循环（服务端 hold ~35s）。
- * get_updates_buf 持久化到状态目录，重启不丢消息 offset。
- *
- * onMessage 是 fire-and-forget：agent 执行可能耗时数分钟，
- * 不能阻塞轮询（否则看不到用户的后续消息）。
- */
 export async function runInboundLoop(opts: {
   creds: WeixinCredentials;
   abortSignal: AbortSignal;
-  onMessage: (msg: InboundTextMessage) => Promise<void>;
+  onMessage: (msg: ParsedMessage) => Promise<void>;
 }): Promise<void> {
   const { creds, abortSignal, onMessage } = opts;
   const syncFilePath = getSyncBufFilePath(creds.accountId);
@@ -87,10 +75,11 @@ export async function runInboundLoop(opts: {
 
     for (const msg of resp.msgs ?? []) {
       if (!isUserTextMessage(msg)) continue;
-      const inbound: InboundTextMessage = {
+      const inbound: ParsedMessage = {
         fromUserId: msg.from_user_id!,
         text: extractText(msg),
         contextToken: msg.context_token,
+        receivedAt: Date.now(),
       };
       void onMessage(inbound).catch((err) =>
         console.error("[weixin] 处理消息失败:", err),

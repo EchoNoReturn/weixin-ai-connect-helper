@@ -1,7 +1,7 @@
 // ACP 冒烟测试：不依赖微信扫码，直接驱动 `opencode acp` 回答一个问题。
 // 运行: bun run test:acp
 
-import { AcpAgent } from "../src/acp/agent.ts";
+import { AcpAgent } from "@yoyojcoder-weixin-ai/agent";
 
 console.log("[test] 启动 opencode acp...");
 const agent = await AcpAgent.start(
