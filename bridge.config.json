@@ -1,0 +1,17 @@
+{
+  "allowFrom": [],
+  "defaultAgent": "opencode",
+  "agents": {
+    "opencode": {
+      "command": "opencode",
+      "args": ["acp"],
+      "cwd": ".",
+      "notifyPolicy": "none"
+    }
+  },
+  "autoApprove": true,
+  "webPort": 3210,
+  "pluginsFile": "plugins.json",
+  "streamFlushMinChars": 200,
+  "streamFlushIdleMs": 3000
+}
