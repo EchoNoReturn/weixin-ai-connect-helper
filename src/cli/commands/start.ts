@@ -4,11 +4,11 @@ import { loadConfig } from "../../config.ts";
 import { createLogger, initFileLogging } from "@yoyojcoder-weixin-ai/core";
 import { checkWeixinCredentials } from "@yoyojcoder-weixin-ai/transport";
 import { writePid, clearPid, writeHealth, clearHealth, isRunning, getPidPath } from "../daemon.ts";
-import { ensurePghDev, getPghPath } from "../pgh.ts";
+import { getPghPath, isPghAvailable, isDevMode } from "../pgh.ts";
 
 export interface StartOptions {
   port?: number;
-  noWeb?: boolean;
+  web?: boolean;
   foreground?: boolean;
 }
 
@@ -29,9 +29,11 @@ export async function execStart(opts: StartOptions): Promise<void> {
 
   console.log(`使用已登录账号: ${creds.accountId}`);
 
-  // 确保 pgh 工具可用（开发阶段自动打包，仅后台模式需要）
-  if (!opts.foreground) {
-    ensurePghDev();
+  // 后台模式需要 pgh，如果不可用则回退到前台模式
+  if (!opts.foreground && !isPghAvailable()) {
+    console.warn("警告: 未找到 pgh 程序，回退到前台模式");
+    console.warn("如需后台运行，请确保 pgh 程序在 PATH 中或与 wah 同目录");
+    opts.foreground = true;
   }
 
   if (opts.foreground) {
@@ -69,7 +71,7 @@ async function runForeground(opts: StartOptions): Promise<void> {
     });
   }, 5000);
 
-  if (!opts.noWeb) {
+  if (opts.web) {
     const webPort = config.webPort;
     log.info(`Web 控制台: http://localhost:${webPort}`);
     const { startWebServer } = await import("../../web-server.ts");
@@ -96,12 +98,13 @@ function runBackground(opts: StartOptions): void {
   const pghPath = getPghPath();
   
   // 构建要执行的命令
-  const command = process.argv[1]?.endsWith(".ts") ? "bun" : (process.argv[0] || "bun");
-  const commandArgs = process.argv[1]?.endsWith(".ts") 
-    ? ["src/cli/index.ts", "start", "--foreground"]
+  const command = isDevMode() ? "bun" : (process.execPath || "bun");
+  const commandArgs = isDevMode()
+    ? ["src/cli/index.ts", "start", "--foreground", "--dev"]
     : ["start", "--foreground"];
   
-  if (opts.noWeb) commandArgs.push("--no-web");
+  // 只有启用 web 时才传递 --web 参数
+  if (opts.web) commandArgs.push("--web");
   if (opts.port) commandArgs.push("--port", String(opts.port));
   
   const stateDir = process.env.BRIDGE_STATE_DIR

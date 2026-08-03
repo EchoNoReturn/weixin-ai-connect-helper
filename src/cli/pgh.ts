@@ -1,15 +1,17 @@
-import { existsSync, mkdirSync } from "fs";
+import { existsSync } from "fs";
 import path from "path";
-import { execSync } from "child_process";
 
 /**
  * 判断是否为开发阶段
- * 开发阶段：运行的是 .ts 文件，或者存在 tool/pgh/ 目录
+ * 通过环境变量 WAH_DEV=1 或 process.argv 中的 --dev 标志判断
  */
 export function isDevMode(): boolean {
-  const isTsFile = process.argv[1]?.endsWith(".ts");
-  const hasPghSource = existsSync(path.join(__dirname, "../../tool/pgh"));
-  return isTsFile || hasPghSource;
+  // 环境变量判断
+  if (process.env.WAH_DEV === "1") {
+    return true;
+  }
+  // 命令行参数判断
+  return process.argv.includes("--dev");
 }
 
 /**
@@ -19,46 +21,29 @@ export function getPghPath(): string {
   if (isDevMode()) {
     // 开发阶段：tool/pgh/dist/pgh.exe
     return path.join(__dirname, "../../tool/pgh/dist/pgh.exe");
-  } else {
-    // 生产阶段：wah 同级目录
-    return path.join(path.dirname(process.argv[0] || ""), "pgh");
   }
+  
+  // 生产阶段：使用 process.execPath 获取二进制目录
+  const execDir = path.dirname(process.execPath || "");
+  const pghPath = path.join(execDir, "pgh");
+  
+  if (existsSync(pghPath)) {
+    return pghPath;
+  }
+  
+  // 尝试当前工作目录
+  const cwdPgh = path.join(process.cwd(), "pgh");
+  if (existsSync(cwdPgh)) {
+    return cwdPgh;
+  }
+  
+  return pghPath; // 返回默认路径，后续检查是否存在
 }
 
 /**
- * 开发阶段确保 pgh 可用
- * 如果不存在则自动打包
+ * 检查 pgh 是否可用
  */
-export function ensurePghDev(): void {
-  if (!isDevMode()) {
-    return;
-  }
-
+export function isPghAvailable(): boolean {
   const pghPath = getPghPath();
-  if (existsSync(pghPath)) {
-    return;
-  }
-
-  console.log("pgh 未找到，正在自动打包...");
-  
-  try {
-    const pghDir = path.join(__dirname, "../../tool/pgh");
-    const distDir = path.join(pghDir, "dist");
-    
-    // 确保 dist 目录存在
-    if (!existsSync(distDir)) {
-      mkdirSync(distDir, { recursive: true });
-    }
-    
-    // 执行 go build
-    execSync(`go build -o ${path.join(distDir, "pgh.exe")} .`, {
-      cwd: pghDir,
-      stdio: "inherit",
-    });
-    
-    console.log("pgh 打包完成");
-  } catch (error) {
-    console.error("pgh 自动打包失败:", error);
-    process.exit(1);
-  }
+  return existsSync(pghPath);
 }

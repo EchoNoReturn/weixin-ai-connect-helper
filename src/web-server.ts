@@ -1,9 +1,10 @@
 import { createLogger } from "@yoyojcoder-weixin-ai/core";
 import { execSync } from "child_process";
+import { isDevMode } from "./cli/pgh.ts";
 
 function findBunPath(): string {
   // 开发模式下直接用 bun
-  if (process.argv[1]?.endsWith(".ts")) {
+  if (isDevMode()) {
     return "bun";
   }
   
@@ -32,7 +33,7 @@ export function startWebServer(port: number): ReturnType<typeof Bun.spawn> {
   log.info(`启动 Web 控制台 (port=${port})`);
 
   const bunPath = findBunPath();
-  const webDir = process.argv[1]?.endsWith(".ts") 
+  const webDir = isDevMode() 
     ? "app/web" 
     : `${require("path").dirname(process.argv[0])}/app/web`;
   

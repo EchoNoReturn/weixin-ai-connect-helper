@@ -17,7 +17,7 @@ program
   .option("--port <port>", "Web 控制台端口")
   .action(async (opts) => {
     const { execStart } = await import("./commands/start.ts");
-    await execStart({ port: Number(opts.port), noWeb: !opts.web, foreground: opts.foreground });
+    await execStart({ port: Number(opts.port), web: opts.web, foreground: opts.foreground });
   });
 
 // ── stop ──
