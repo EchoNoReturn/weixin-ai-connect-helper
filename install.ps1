@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 # 配置
 $Repo = "EchoNoReturn/weixin-ai-connect-helper"
 $BinaryName = "wah"
-$InstallDir = Join-Path $env:LOCALAPPDATA "wah"
+$InstallDir = Join-Path $env:USERPROFILE ".wah"
 
 # 颜色函数
 function Write-Info { Write-Host $args -ForegroundColor Green }
@@ -89,7 +89,7 @@ function Install-Wah {
     Write-Host "    $BinaryName start    # 启动服务"
     Write-Host "    $BinaryName --help   # 查看帮助"
     Write-Host ""
-    Write-Host "  注意: 可能需要重启终端才能使用新命令"
+    Write-Host "  注意: 需要重启终端才能使用新命令"
     Write-Host ""
 }
 

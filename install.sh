@@ -6,7 +6,7 @@ set -e
 
 REPO="EchoNoReturn/weixin-ai-connect-helper"
 BINARY_NAME="wah"
-INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.wah}"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -106,13 +106,36 @@ install() {
     chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
     chmod +x "${INSTALL_DIR}/pgh"
     
-    # 检查 PATH
+    # 自动配置 PATH
     if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-        warn "安装目录 ${INSTALL_DIR} 不在 PATH 中"
-        warn "请将以下内容添加到 ~/.bashrc 或 ~/.zshrc:"
-        echo ""
-        echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
-        echo ""
+        local shell_config=""
+        local export_line="export PATH=\"\$HOME/.wah:\$PATH\""
+        
+        # 检测 shell 配置文件
+        if [ -n "$ZSH_VERSION" ] || [ -f "$HOME/.zshrc" ]; then
+            shell_config="$HOME/.zshrc"
+        elif [ -n "$BASH_VERSION" ] || [ -f "$HOME/.bashrc" ]; then
+            shell_config="$HOME/.bashrc"
+        elif [ -f "$HOME/.bash_profile" ]; then
+            shell_config="$HOME/.bash_profile"
+        elif [ -f "$HOME/.profile" ]; then
+            shell_config="$HOME/.profile"
+        fi
+        
+        if [ -n "$shell_config" ]; then
+            # 检查是否已经配置过
+            if ! grep -q '$HOME/.wah' "$shell_config" 2>/dev/null; then
+                echo "" >> "$shell_config"
+                echo "# WeChat AI Connect Helper" >> "$shell_config"
+                echo "$export_line" >> "$shell_config"
+                info "已自动添加 PATH 到 ${shell_config}"
+            fi
+            # 立即生效
+            export PATH="$HOME/.wah:$PATH"
+        else
+            warn "未找到 shell 配置文件，请手动添加 PATH:"
+            echo "  $export_line"
+        fi
     fi
     
     info "安装完成！"
@@ -123,6 +146,8 @@ install() {
     echo "  使用方法:"
     echo "    ${BINARY_NAME} start    # 启动服务"
     echo "    ${BINARY_NAME} --help   # 查看帮助"
+    echo ""
+    echo "  注意: 可能需要重启终端才能使用新命令"
     echo ""
 }
 
@@ -157,7 +182,7 @@ main() {
             echo "  -h, help     显示帮助"
             echo ""
             echo "环境变量:"
-            echo "  INSTALL_DIR  安装目录 (默认: ~/.local/bin)"
+            echo "  INSTALL_DIR  安装目录 (默认: ~/.wah)"
             ;;
         *)
             check_deps
