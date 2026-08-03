@@ -214,4 +214,4 @@ jobs:
             **Full Changelog**: https://github.com/EchoNoReturn/weixin-ai-connect-helper/commits/${{ github.event.inputs.tag || github.ref_name }}
           files: |
             artifacts/*.tar.gz
-            artifacts/*.zip
+            artifacts/**/*.zip
