@@ -38,9 +38,7 @@ INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/EchoNoRe
 
 卸载：
 ```bash
-~/.wah/wah uninstall
-# 或
-curl -fsSL https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main/install.sh | bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main/uninstall.sh | bash
 ```
 
 ### Windows
@@ -52,7 +50,7 @@ irm https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main
 
 卸载：
 ```powershell
-~\.wah\wah.exe uninstall
+irm https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main/uninstall.ps1 | iex
 ```
 
 ### 手动安装
