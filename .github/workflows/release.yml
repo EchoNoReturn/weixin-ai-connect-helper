@@ -73,6 +73,9 @@ jobs:
           done
           ls -la node_modules/@yoyojcoder-weixin-ai/
 
+      - name: Generate version file
+        run: bun run scripts/gen-version.ts
+
       - name: Build main program
         run: bun build --compile --target=${{ matrix.bun_target }} src/cli/index.ts --outfile dist/wah
 
