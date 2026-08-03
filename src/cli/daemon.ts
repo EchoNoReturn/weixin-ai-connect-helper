@@ -18,8 +18,18 @@ export async function readPid(): Promise<number | null> {
   const f = Bun.file(PID_FILE);
   if (!(await f.exists())) return null;
   const text = (await f.text()).trim();
+  
+  // 尝试解析为数字（我们自己写的格式）
   const pid = Number(text);
-  return isNaN(pid) ? null : pid;
+  if (!isNaN(pid)) return pid;
+  
+  // 尝试解析为 JSON（pgh 写入的格式）
+  try {
+    const info = JSON.parse(text);
+    return info?.pid ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function clearPid(): void {
