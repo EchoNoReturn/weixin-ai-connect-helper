@@ -1,4 +1,7 @@
 import type { BridgeConfig } from "@yoyojcoder-weixin-ai/core";
+import { getConfigPath } from "./bin-dir.ts";
+
+export type { BridgeConfig };
 
 const DEFAULTS: BridgeConfig = {
   allowFrom: [],
@@ -19,7 +22,8 @@ const DEFAULTS: BridgeConfig = {
 };
 
 export async function loadConfig(): Promise<BridgeConfig> {
-  const file = Bun.file("bridge.config.json");
+  const configPath = getConfigPath("bridge.config.json");
+  const file = Bun.file(configPath);
   if (!(await file.exists())) {
     return DEFAULTS;
   }

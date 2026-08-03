@@ -13,7 +13,7 @@
     "stop": "bun run src/cli/index.ts stop",
     "dev:web": "bun run --filter @yoyojcoder-weixin-ai/web dev",
     "build:web": "bun run --filter @yoyojcoder-weixin-ai/web build",
-    "build": "bun build --compile src/cli/index.ts --outfile dist/wah",
+    "build": "bun run scripts/build.ts",
     "build:pgh": "bun run scripts/build-pgh.ts",
     "postinstall": "bun run scripts/postinstall.ts",
     "test:acp": "bun run scripts/test-acp.ts",

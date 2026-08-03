@@ -1,10 +1,9 @@
 import { readHealth, isRunning, readPid } from "../daemon.ts";
+import { VERSION } from "../../version.ts";
 
 export async function execStatus(): Promise<void> {
-  const pkg = JSON.parse(await Bun.file("package.json").text());
-
   console.log("=== weixin-ai-connect-helper ===\n");
-  console.log(`版本:        ${pkg.version}`);
+  console.log(`版本:        ${VERSION}`);
 
   if (await isRunning()) {
     const pid = await readPid();

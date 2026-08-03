@@ -1,3 +1,5 @@
+import path from "path";
+import { existsSync } from "fs";
 import type {
   ParsedMessage,
   RoutedMessage,
@@ -51,9 +53,35 @@ interface PluginConfigEntry {
   entry: string;
 }
 
+/**
+ * 解析插件配置文件路径
+ * 优先查找二进制目录，回退到当前工作目录
+ */
+function resolvePluginsPath(file: string): string {
+  // 开发阶段：运行的是 .ts 文件
+  const isDev = process.argv[1]?.endsWith(".ts");
+  
+  if (isDev) {
+    // 开发阶段：使用当前工作目录
+    return file;
+  }
+  
+  // 生产阶段：二进制文件所在目录
+  const binDir = path.dirname(process.argv[0] || "");
+  const binPath = path.join(binDir, file);
+  
+  if (existsSync(binPath)) {
+    return binPath;
+  }
+  
+  // 回退到当前工作目录
+  return file;
+}
+
 export async function loadPlugins(file: string): Promise<PluginRegistry> {
   const registry = emptyRegistry();
-  const f = Bun.file(file);
+  const resolvedPath = resolvePluginsPath(file);
+  const f = Bun.file(resolvedPath);
   if (!(await f.exists())) {
     return registry;
   }

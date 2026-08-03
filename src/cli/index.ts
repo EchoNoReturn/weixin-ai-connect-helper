@@ -1,11 +1,12 @@
 import { Command } from "commander";
+import { VERSION } from "../version.ts";
 
 const program = new Command();
 
 program
   .name("wah")
   .description("weixin-ai-connect-helper — 微信 AI Agent 桥接")
-  .version((JSON.parse(await Bun.file("package.json").text())).version);
+  .version(VERSION);
 
 // ── start ──
 program
