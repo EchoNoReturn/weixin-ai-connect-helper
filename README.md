@@ -28,7 +28,8 @@ curl -fsSL https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-help
 安装脚本会自动：
 - 检测你的系统架构（Intel/Apple Silicon）
 - 下载最新版本
-- 安装到 `~/.local/bin` 目录
+- 安装到 `~/.wah` 目录
+- 自动配置 PATH 环境变量
 
 自定义安装目录：
 ```bash
@@ -37,7 +38,7 @@ INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/EchoNoRe
 
 卸载：
 ```bash
-~/.local/bin/wah uninstall
+~/.wah/wah uninstall
 # 或
 curl -fsSL https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main/install.sh | bash -s -- --uninstall
 ```
@@ -51,7 +52,7 @@ irm https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main
 
 卸载：
 ```powershell
-~\AppData\Local\wah\wah.exe uninstall
+~\.wah\wah.exe uninstall
 ```
 
 ### 手动安装
@@ -239,13 +240,12 @@ bun run typecheck
 # 编译为独立可执行文件
 bun run build
 
-# 产物：dist/weixin-ai-connect-helper
-# 需要 node_modules/ 在同级目录下运行
-./dist/weixin-ai-connect-helper --help
-./dist/weixin-ai-connect-helper start
+# 产物：dist/wah
+./dist/wah --help
+./dist/wah start
 ```
 
-打包方式：`bun build --compile` 将 TypeScript 源码编译为二进制，npm 包标记为 external（运行时从 `node_modules/` 加载）。
+打包方式：`bun build --compile` 将 TypeScript 源码编译为单个二进制文件，所有依赖打包在内，无需 node_modules。
 
 
 ## 项目结构
