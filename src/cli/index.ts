@@ -13,7 +13,7 @@ program
   .command("start")
   .description("启动桥接服务（默认后台运行）")
   .option("-f, --foreground", "前台运行（调试用）")
-  .option("--no-web", "不启动 Web 控制台")
+  .option("--web", "启动 Web 控制台")
   .option("--port <port>", "Web 控制台端口")
   .action(async (opts) => {
     const { execStart } = await import("./commands/start.ts");
