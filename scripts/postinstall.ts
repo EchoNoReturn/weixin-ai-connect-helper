@@ -15,7 +15,7 @@ const workspaceDirs: string[] = [];
 for (const glob of workspaceGlobs) {
   const [dir, pattern] = glob.split("/*");
   if (pattern !== undefined) {
-    const parent = join(root, dir);
+    const parent = join(root, dir!);
     if (existsSync(parent)) {
       for (const entry of readdirSync(parent, { withFileTypes: true })) {
         if (entry.isDirectory()) {
