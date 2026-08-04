@@ -99,7 +99,6 @@ install() {
     info "正在安装到 ${INSTALL_DIR}..."
     cp "${tmp_dir}/wah" "${INSTALL_DIR}/${BINARY_NAME}"
     cp "${tmp_dir}/pgh" "${INSTALL_DIR}/pgh"
-    cp "${tmp_dir}/package.json" "${INSTALL_DIR}/"
     cp "${tmp_dir}/plugins.json" "${INSTALL_DIR}/"
     
     # 设置执行权限

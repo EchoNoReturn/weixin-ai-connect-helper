@@ -1,42 +1,26 @@
-# WeChat AI Connect Helper - Windows 卸载脚本
+﻿# WeChat AI Connect Helper - Windows 卸载脚本
 # 使用方法: irm https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main/uninstall.ps1 | iex
+
+param(
+    [switch]$Help
+)
 
 $ErrorActionPreference = "Stop"
 
-# 配置
+# 配置（新版状态目录与安装目录同为 ~/.wah）
 $InstallDir = Join-Path $env:USERPROFILE ".wah"
-$StateDir = Join-Path $env:USERPROFILE ".weixin-ai-connect-helper"
+$LegacyStateDir = Join-Path $env:USERPROFILE ".weixin-ai-connect-helper"
 
-# 颜色函数
+# 输出函数（注意：不要遮蔽内置的 Write-Error cmdlet）
 function Write-Info { Write-Host $args -ForegroundColor Green }
 function Write-Warn { Write-Host $args -ForegroundColor Yellow }
-function Write-Error { Write-Host $args -ForegroundColor Red; exit 1 }
 
-# 停止服务
-function Stop-Service {
+# 停止服务（wah stop 自身能容忍"未运行"状态、也能解析 pgh 的 JSON pid 文件）
+function Stop-WahService {
     $wahExe = Join-Path $InstallDir "wah.exe"
-    
-    # 检查 wah 是否存在
-    if (-not (Test-Path $wahExe)) {
-        return
-    }
-    
-    # 检查是否有 PID 文件
-    $pidFile = Join-Path $StateDir "bridge.pid"
-    if (-not (Test-Path $pidFile)) {
-        return
-    }
-    
-    $pid = Get-Content $pidFile -ErrorAction SilentlyContinue
-    if ([string]::IsNullOrWhiteSpace($pid)) {
-        return
-    }
-    
-    # 检查进程是否在运行
-    $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
-    if ($null -ne $process) {
-        Write-Info "检测到服务正在运行 (PID: $pid)，正在停止..."
-        & $wahExe stop 2>$null
+    if (Test-Path $wahExe) {
+        Write-Info "正在停止服务（如果在运行）..."
+        & $wahExe stop 2>$null | Out-Null
         Start-Sleep -Seconds 1
     }
 }
@@ -44,45 +28,43 @@ function Stop-Service {
 # 卸载
 function Uninstall-Wah {
     Write-Info "正在卸载 weixin-ai-connect-helper..."
-    
-    # 先停止服务
-    Stop-Service
-    
-    # 删除安装目录
+
+    # 先停止服务，避免 wah.exe 被占用导致删除失败
+    Stop-WahService
+
+    # 删除安装目录（包含状态数据：登录凭证、bridge.db、日志）
     if (Test-Path $InstallDir) {
-        Remove-Item -ItemType Directory -Force -Path $InstallDir
+        Remove-Item -Recurse -Force -Path $InstallDir
         Write-Info "已删除安装目录: $InstallDir"
     } else {
         Write-Warn "安装目录不存在: $InstallDir"
     }
-    
-    # 删除状态目录
-    if (Test-Path $StateDir) {
-        Remove-Item -ItemType Directory -Force -Path $StateDir
-        Write-Info "已删除状态目录: $StateDir"
+
+    # 清理旧版本遗留的状态目录
+    if (Test-Path $LegacyStateDir) {
+        Remove-Item -Recurse -Force -Path $LegacyStateDir
+        Write-Info "已删除旧版状态目录: $LegacyStateDir"
     }
-    
-    # 从 PATH 移除
-    $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    if ($currentPath -like "*$InstallDir*") {
-        $newPath = ($currentPath -split ";" | Where-Object { $_ -ne $InstallDir }) -join ";"
-        [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-        $env:Path = ($env:Path -split ";" | Where-Object { $_ -ne $InstallDir }) -join ";"
-        Write-Info "已从 PATH 移除安装目录"
+
+    # 从 PATH 移除（拆分后精确比较，容忍尾部反斜杠差异）
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($userPath) {
+        $newPath = ($userPath -split ";" | Where-Object { $_ -and ($_.TrimEnd('\') -ne $InstallDir) }) -join ";"
+        if ($newPath -ne $userPath) {
+            [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+            Write-Info "已从用户 PATH 移除安装目录"
+        }
     }
-    
-    Write-Info "卸载完成！"
+    $env:Path = ($env:Path -split ";" | Where-Object { $_ -and ($_.TrimEnd('\') -ne $InstallDir) }) -join ";"
+
+    Write-Info "卸载完成！登录凭证与配置已一并删除"
     Write-Host ""
     Write-Host "  注意: 可能需要重启终端才能使更改生效"
     Write-Host ""
 }
 
-# 主函数
+# 主函数（参数来自脚本顶部 param()，函数内通过动态作用域读取）
 function Main {
-    param(
-        [switch]$Help
-    )
-    
     if ($Help) {
         Write-Host "WeChat AI Connect Helper Windows 卸载脚本"
         Write-Host ""
@@ -92,13 +74,13 @@ function Main {
         Write-Host "  (无)          卸载程序"
         Write-Host "  -Help         显示帮助"
         Write-Host ""
-        Write-Host "快速卸载（管理员 PowerShell）:"
+        Write-Host "快速卸载:"
         Write-Host "  irm https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main/uninstall.ps1 | iex"
         Write-Host ""
         return
     }
-    
+
     Uninstall-Wah
 }
 
-Main @PSBoundParameters
+Main
