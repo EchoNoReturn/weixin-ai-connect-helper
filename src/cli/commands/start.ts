@@ -103,7 +103,7 @@ function runBackground(opts: StartOptions): void {
   }
 
   // 构建要执行的命令
-  const command = isDevMode() ? "bun" : (process.execPath || "bun");
+  const command = isDevMode() ? "bun" : process.execPath;
   const commandArgs = isDevMode()
     ? ["src/cli/index.ts", "start", "--foreground"]
     : ["start", "--foreground"];
