@@ -22,7 +22,12 @@ const COLORS: Record<Level, string> = {
 };
 const RESET = "\x1b[0m";
 
-const DEFAULT_LOGS_DIR = path.join(os.tmpdir(), "weixin-ai-connect-helper", "logs");
+// 默认写到 state dir（~/.wah/logs，可被 BRIDGE_STATE_DIR 覆盖）；
+// initFileLogging(dir) 可显式指定其他目录
+const DEFAULT_LOGS_DIR = path.join(
+  process.env.BRIDGE_STATE_DIR?.trim() || path.join(os.homedir(), ".wah"),
+  "logs",
+);
 
 let logsDirOverride: string | null = null;
 let logFile: string | null = null;

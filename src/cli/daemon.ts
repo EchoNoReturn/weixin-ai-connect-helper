@@ -1,9 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import os from "node:os";
+import { STATE_DIR } from "../env.ts";
 
-const STATE_DIR = process.env.BRIDGE_STATE_DIR?.trim() || path.join(os.homedir(), ".weixin-ai-connect-helper");
 const PID_FILE = path.join(STATE_DIR, "bridge.pid");
 const HEALTH_FILE = path.join(STATE_DIR, "bridge.health.json");
 const LOGS_DIR = path.join(STATE_DIR, "logs");

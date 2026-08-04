@@ -11,13 +11,14 @@ WeChat-to-AI-agent bridge. Reuses `@tencent-weixin/openclaw-weixin` protocol lay
 | Install | `bun install` |
 | Smoke test (no WeChat login) | `bun run test:acp` |
 | Start bridge (first run: QR scan) | `bun start` |
+| Build CLI → `dist/` (wah + pgh) | `bun run build` (`build.ts [all\|version\|pgh\|cli]`) |
 | Type check | `bunx tsc --noEmit` |
 
 No test suite, no lint config, no formatter config exists yet.
 
 ## Critical: import order
 
-`src/env.ts` **must be imported first** in `index.ts`. It sets `OPENCLAW_STATE_DIR` before any openclaw-weixin module loads. State directory defaults to `~/.weixin-ai-connect-helper`; override with `BRIDGE_STATE_DIR` env var.
+`src/env.ts` **must be imported first** in `index.ts`. It sets `OPENCLAW_STATE_DIR` before any openclaw-weixin module loads. State directory defaults to `~/.wah`; override with `BRIDGE_STATE_DIR` env var.
 
 ## Dependencies & deep imports
 
@@ -37,7 +38,11 @@ src/weixin/inbound.ts ← getUpdates long-poll loop
 src/weixin/outbound.ts← send text + contextToken management
 src/acp/agent.ts      ← ACP client (spawn agent subprocess, sessions, streaming)
 src/router.ts         ← prefix routing (/oc /cc /cx) + (user,agent)→session mapping
+scripts/build.ts      ← build entry: `bun run scripts/build.ts [all|version|pgh|cli]`
+scripts/steps/        ← build steps (version / pgh Go build → dist / cli compile); shared helpers in scripts/lib/
 scripts/test-acp.ts   ← ACP smoke test (no WeChat)
+src/cli/runtime.ts    ← isDevMode (auto-detected via .ts entry; WAH_DEV=0/1 override) + resolveTool (env override → dev path → global PATH/extraDirs → execPath sibling → cwd, win32 .exe/PATHEXT aware)
+src/cli/pgh.ts        ← findPgh()/isPghAvailable() built on resolveTool (override: WAH_PGH_PATH)
 types/openclaw-weixin.d.ts ← ambient types for deep imports
 bridge.config.json    ← optional config (gitignored)
 ```
@@ -70,6 +75,7 @@ bridge.config.json    ← optional config (gitignored)
 - Stream coalescing: flush when buffer ≥200 chars AND idle ≥3s; always flush on prompt end.
 - Agent stderr is inherited (visible in bridge terminal). stdout is ACP ndjson.
 - Each (userId, agentId) pair gets its own ACP session; prompts per user are serialized via a queue.
+- Log files live at `~/.wah/logs/YYYY-MM-DD.log` (daily rotation, dir follows `BRIDGE_STATE_DIR`); `wah status` prints the latest log path when one exists.
 
 ## Safety
 

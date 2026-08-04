@@ -8,6 +8,6 @@ import path from "node:path";
  */
 export const STATE_DIR =
   process.env.BRIDGE_STATE_DIR?.trim() ||
-  path.join(os.homedir(), ".weixin-ai-connect-helper");
+  path.join(os.homedir(), ".wah");
 
 process.env.OPENCLAW_STATE_DIR = STATE_DIR;

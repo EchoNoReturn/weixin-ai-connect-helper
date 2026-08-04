@@ -8,7 +8,7 @@ let db: Database | null = null;
 export function getDb(): Database {
   if (db) return db;
 
-  const stateDir = process.env.BRIDGE_STATE_DIR?.trim() || path.join(os.homedir(), ".weixin-ai-connect-helper");
+  const stateDir = process.env.BRIDGE_STATE_DIR?.trim() || path.join(os.homedir(), ".wah");
   mkdirSync(stateDir, { recursive: true });
 
   const dbPath = path.join(stateDir, "bridge.db");

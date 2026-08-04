@@ -172,7 +172,7 @@ jobs:
 
             ### ⚙️ 配置
 
-            首次运行后会在用户目录下创建配置文件 `~/.weixin-ai-connect-helper/bridge.config.json`，可按需修改：
+            首次运行后会在用户目录下创建配置文件 `~/.wah/bridge.config.json`，可按需修改：
 
             ```jsonc
             {

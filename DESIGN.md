@@ -513,7 +513,7 @@ packages/web/
 
 ### 5.1 SQLite（Session 持久化）
 
-数据库文件：`~/.weixin-ai-connect-helper/bridge.db`
+数据库文件：`~/.wah/bridge.db`
 
 ```sql
 CREATE TABLE sessions (
