@@ -14,7 +14,7 @@
     "dev:web": "bun run --filter @yoyojcoder-weixin-ai/web dev",
     "build:web": "bun run --filter @yoyojcoder-weixin-ai/web build",
     "build": "bun run scripts/build.ts",
-    "build:pgh": "bun run scripts/build-pgh.ts",
+    "build:pgh": "bun run scripts/build.ts pgh",
     "postinstall": "bun run scripts/postinstall.ts",
     "test:acp": "bun run scripts/test-acp.ts",
     "test": "bun test packages/ scripts/",

@@ -21,29 +21,17 @@ jobs:
         include:
           - os: ubuntu-latest
             goos: linux
-            goarch: amd64
             artifact_name: wah-linux-amd64
-            pgh_name: pgh
-            bun_target: bun-linux-x64
           # macOS Intel 需要自备 runner 或本地编译
           # - os: macos-13
           #   goos: darwin
-          #   goarch: amd64
           #   artifact_name: wah-darwin-amd64
-          #   pgh_name: pgh
-          #   bun_target: bun-darwin-x64
           - os: macos-latest
             goos: darwin
-            goarch: arm64
             artifact_name: wah-darwin-arm64
-            pgh_name: pgh
-            bun_target: bun-darwin-arm64
           - os: windows-latest
             goos: windows
-            goarch: amd64
             artifact_name: wah-windows-amd64.exe
-            pgh_name: pgh.exe
-            bun_target: bun-windows-x64
 
     steps:
       - name: Checkout
@@ -73,31 +61,30 @@ jobs:
           done
           ls -la node_modules/@yoyojcoder-weixin-ai/
 
-      - name: Generate version file
-        run: bun run scripts/gen-version.ts
+      # 统一构建管线：version → pgh（Go 原生编译）→ wah（bun 原生 compile），产物均在 dist/
+      - name: Build (version + pgh + wah)
+        run: bun run build
 
-      - name: Build main program
-        run: bun build --compile --target=${{ matrix.bun_target }} src/cli/index.ts --outfile dist/wah
-
-      - name: Build pgh
+      # 冒烟测试：确保编译产物能正常运行
+      - name: Smoke test
+        shell: bash
         run: |
-          mkdir -p tool/pgh/dist
-          cd tool/pgh
-          go build -o dist/${{ matrix.pgh_name }} .
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
+          ls -la dist/
+          BIN=./dist/wah
+          PGH=./dist/pgh
+          if [ "${{ matrix.goos }}" = "windows" ]; then BIN=./dist/wah.exe; PGH=./dist/pgh.exe; fi
+          $BIN --version
+          test -x "$PGH"
 
       - name: Package (unix)
         if: matrix.goos != 'windows'
         run: |
           mkdir -p dist/release
           cp dist/wah dist/release/
-          cp tool/pgh/dist/${{ matrix.pgh_name }} dist/release/
-          cp package.json dist/release/
+          cp dist/pgh dist/release/
           cp plugins.json dist/release/
           cp bridge.config.json dist/release/ 2>/dev/null || true
-          chmod +x dist/release/*
+          chmod +x dist/release/wah dist/release/pgh
           cd dist
           tar -czf ${{ matrix.artifact_name }}.tar.gz -C release .
           mv ${{ matrix.artifact_name }}.tar.gz ../
@@ -108,8 +95,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist/release
           Copy-Item dist/wah.exe dist/release/
-          Copy-Item tool/pgh/dist/${{ matrix.pgh_name }} dist/release/
-          Copy-Item package.json dist/release/
+          Copy-Item dist/pgh.exe dist/release/
           Copy-Item plugins.json dist/release/
           if (Test-Path bridge.config.json) { Copy-Item bridge.config.json dist/release/ }
           cd dist
@@ -177,11 +163,8 @@ jobs:
             # 安装依赖
             bun install
 
-            # 构建主程序
+            # 构建（主程序 wah + 进程管理器 pgh，产物在 dist/）
             bun run build
-
-            # 构建 pgh (进程管理器)
-            bun run build:pgh
 
             # 运行
             ./dist/wah start

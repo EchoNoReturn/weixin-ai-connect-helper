@@ -1,31 +1,33 @@
-import { copyFileSync, mkdirSync, existsSync } from "fs";
-import { execSync } from "child_process";
-import path from "path";
+/**
+ * 构建入口
+ *   bun run scripts/build.ts           全量构建（version → pgh → cli）
+ *   bun run scripts/build.ts version   仅生成 src/version.ts
+ *   bun run scripts/build.ts pgh       仅编译 pgh（Go）并同步到 dist/
+ *   bun run scripts/build.ts cli       仅编译 wah
+ */
+import { buildCli } from "./steps/cli.ts";
+import { buildPgh } from "./steps/pgh.ts";
+import { generateVersion } from "./steps/version.ts";
 
-const rootDir = path.join(import.meta.dir, "..");
-const distDir = path.join(rootDir, "dist");
+const step = process.argv[2] ?? "all";
 
-// 确保 dist 目录存在
-if (!existsSync(distDir)) {
-  mkdirSync(distDir, { recursive: true });
+switch (step) {
+  case "version":
+    generateVersion();
+    break;
+  case "pgh":
+    buildPgh();
+    break;
+  case "cli":
+    buildCli();
+    break;
+  case "all":
+    generateVersion();
+    buildPgh({ optional: true });
+    buildCli();
+    console.log("Build complete!");
+    break;
+  default:
+    console.error(`未知步骤: ${step}（可选: all | version | pgh | cli）`);
+    process.exit(1);
 }
-
-// 1. 生成版本文件
-console.log("Generating version.ts...");
-execSync("bun run scripts/gen-version.ts", {
-  cwd: rootDir,
-  stdio: "inherit",
-});
-
-// 2. 编译二进制
-console.log("Building wah...");
-execSync("bun build --compile src/cli/index.ts --outfile dist/wah", {
-  cwd: rootDir,
-  stdio: "inherit",
-});
-
-// 3. 复制 package.json 到 dist
-console.log("Copying package.json to dist...");
-copyFileSync(path.join(rootDir, "package.json"), path.join(distDir, "package.json"));
-
-console.log("Build complete!");
