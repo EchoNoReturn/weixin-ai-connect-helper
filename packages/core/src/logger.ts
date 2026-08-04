@@ -22,10 +22,15 @@ const COLORS: Record<Level, string> = {
 };
 const RESET = "\x1b[0m";
 
-const LOGS_DIR = path.join(os.tmpdir(), "weixin-ai-connect-helper", "logs");
+const DEFAULT_LOGS_DIR = path.join(os.tmpdir(), "weixin-ai-connect-helper", "logs");
 
+let logsDirOverride: string | null = null;
 let logFile: string | null = null;
 let logStream: fs.WriteStream | null = null;
+
+function getLogsDir(): string {
+  return logsDirOverride ?? DEFAULT_LOGS_DIR;
+}
 
 function getDateStr(): string {
   const now = new Date();
@@ -36,11 +41,11 @@ function getDateStr(): string {
 }
 
 function getLogFile(): string {
-  return path.join(LOGS_DIR, `${getDateStr()}.log`);
+  return path.join(getLogsDir(), `${getDateStr()}.log`);
 }
 
 function ensureLogDirSync(): void {
-  fs.mkdirSync(LOGS_DIR, { recursive: true });
+  fs.mkdirSync(getLogsDir(), { recursive: true });
 }
 
 function getLogStream(): fs.WriteStream | null {
@@ -97,7 +102,10 @@ export function createLogger(scope: string): Logger {
   };
 }
 
-export async function initFileLogging(): Promise<string> {
+export async function initFileLogging(logsDir?: string): Promise<string> {
+  if (logsDir) {
+    logsDirOverride = logsDir;
+  }
   ensureLogDirSync();
   const file = getLogFile();
   // 触发流创建

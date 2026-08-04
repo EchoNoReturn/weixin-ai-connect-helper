@@ -1,4 +1,4 @@
-import { readHealth, isRunning, readPid } from "../daemon.ts";
+import { readHealth, isRunning, readPid, findLatestLogFile } from "../daemon.ts";
 import { VERSION } from "../../version.ts";
 
 export async function execStatus(): Promise<void> {
@@ -40,6 +40,12 @@ export async function execStatus(): Promise<void> {
     }
   } else {
     console.log(`进程状态:    未运行`);
+  }
+
+  // 只有成功启动过（产生过日志文件）才提示日志位置
+  const logFile = await findLatestLogFile();
+  if (logFile) {
+    console.log(`日志文件:    ${logFile}`);
   }
 
   console.log("");

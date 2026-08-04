@@ -1,5 +1,6 @@
 import path from "path";
 import { existsSync } from "fs";
+import { isDevMode } from "./cli/runtime.ts";
 
 /**
  * 获取当前可执行文件所在目录
@@ -8,7 +9,7 @@ import { existsSync } from "fs";
  */
 export function getBinDir(): string {
   // 开发阶段：运行的是 .ts 文件
-  if (process.argv[1]?.endsWith(".ts")) {
+  if (isDevMode()) {
     return __dirname;
   }
   

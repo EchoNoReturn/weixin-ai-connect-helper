@@ -1,31 +1,24 @@
 import { createLogger } from "@yoyojcoder-weixin-ai/core";
-import { execSync } from "child_process";
-import { isDevMode } from "./cli/pgh.ts";
+import path from "path";
+import { isDevMode, resolveTool } from "./cli/runtime.ts";
 
 function findBunPath(): string {
-  // 开发模式下直接用 bun
+  // 开发模式下 process.execPath 就是 bun 自身
   if (isDevMode()) {
-    return "bun";
+    return process.execPath;
   }
-  
-  // 生产模式：尝试找到 bun 的完整路径
-  try {
-    return execSync("which bun", { encoding: "utf-8" }).trim();
-  } catch {
-    // 常见安装路径
-    const paths = [
-      "/opt/homebrew/bin/bun",
-      "/usr/local/bin/bun",
-      `${process.env.HOME}/.bun/bin/bun`,
-    ];
-    for (const p of paths) {
-      try {
-        require("fs").accessSync(p);
-        return p;
-      } catch {}
-    }
-    return "bun"; // 回退
-  }
+
+  // 生产模式：从 wah 同目录 / 常见安装路径 / PATH 中解析
+  const found = resolveTool("bun", {
+    envVar: "WAH_BUN_PATH",
+    extraDirs: [
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+      `${process.env.HOME}/.bun/bin`,
+      `${process.env.USERPROFILE}\\.bun\\bin`,
+    ],
+  });
+  return found ?? "bun"; // 回退：交给 PATH 解析
 }
 
 export function startWebServer(port: number): ReturnType<typeof Bun.spawn> {
@@ -33,10 +26,10 @@ export function startWebServer(port: number): ReturnType<typeof Bun.spawn> {
   log.info(`启动 Web 控制台 (port=${port})`);
 
   const bunPath = findBunPath();
-  const webDir = isDevMode() 
-    ? "app/web" 
-    : `${require("path").dirname(process.argv[0])}/app/web`;
-  
+  const webDir = isDevMode()
+    ? "app/web"
+    : path.join(path.dirname(process.argv[0] ?? process.execPath), "app", "web");
+
   const proc = Bun.spawn([bunPath, "run", "dev"], {
     cwd: webDir,
     stdio: ["ignore", "inherit", "inherit"],

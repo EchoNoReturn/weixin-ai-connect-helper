@@ -3,8 +3,9 @@ import { startBridge } from "../../bridge.ts";
 import { loadConfig } from "../../config.ts";
 import { createLogger, initFileLogging } from "@yoyojcoder-weixin-ai/core";
 import { checkWeixinCredentials } from "@yoyojcoder-weixin-ai/transport";
-import { writePid, clearPid, writeHealth, clearHealth, isRunning, getPidPath } from "../daemon.ts";
-import { getPghPath, isPghAvailable, isDevMode } from "../pgh.ts";
+import { writePid, clearPid, writeHealth, clearHealth, isRunning, getPidPath, getStateDir, getLogsDir } from "../daemon.ts";
+import { findPgh, isPghAvailable } from "../pgh.ts";
+import { isDevMode } from "../runtime.ts";
 
 export interface StartOptions {
   port?: number;
@@ -32,7 +33,7 @@ export async function execStart(opts: StartOptions): Promise<void> {
   // 后台模式需要 pgh，如果不可用则回退到前台模式
   if (!opts.foreground && !isPghAvailable()) {
     console.warn("警告: 未找到 pgh 程序，回退到前台模式");
-    console.warn("如需后台运行，请确保 pgh 程序在 PATH 中或与 wah 同目录");
+    console.warn("如需后台运行，请将 pgh 放到 wah 同目录或 PATH 中，或设置 WAH_PGH_PATH");
     opts.foreground = true;
   }
 
@@ -44,7 +45,7 @@ export async function execStart(opts: StartOptions): Promise<void> {
 }
 
 async function runForeground(opts: StartOptions): Promise<void> {
-  const logFile = await initFileLogging();
+  const logFile = await initFileLogging(getLogsDir());
   const log = createLogger("cli");
   log.info(`日志文件: ${logFile}`);
 
@@ -95,25 +96,27 @@ async function runForeground(opts: StartOptions): Promise<void> {
 }
 
 function runBackground(opts: StartOptions): void {
-  const pghPath = getPghPath();
-  
+  const pghPath = findPgh();
+  if (!pghPath) {
+    console.error("未找到 pgh 程序，无法后台启动");
+    process.exit(1);
+  }
+
   // 构建要执行的命令
   const command = isDevMode() ? "bun" : (process.execPath || "bun");
   const commandArgs = isDevMode()
-    ? ["src/cli/index.ts", "start", "--foreground", "--dev"]
+    ? ["src/cli/index.ts", "start", "--foreground"]
     : ["start", "--foreground"];
   
   // 只有启用 web 时才传递 --web 参数
   if (opts.web) commandArgs.push("--web");
   if (opts.port) commandArgs.push("--port", String(opts.port));
   
-  const stateDir = process.env.BRIDGE_STATE_DIR
-    ? process.env.BRIDGE_STATE_DIR
-    : `${process.env.HOME || process.env.USERPROFILE}/.weixin-ai-connect-helper`;
+  const stateDir = getStateDir();
 
   try {
     // 使用 pgh 启动后台进程
-    const child = Bun.spawn([pghPath, "start", "-f", `${stateDir}/bridge.pid`, command, ...commandArgs], {
+    const child = Bun.spawn([pghPath, "start", "-f", getPidPath(), command, ...commandArgs], {
       stdout: "ignore",
       stderr: "ignore",
       stdin: "ignore",
