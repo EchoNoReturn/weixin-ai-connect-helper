@@ -121,7 +121,10 @@ function runBackground(opts: StartOptions): void {
     // 导致前台进程 isRunning() 误判。
     const pghPidPath = path.join(getStateDir(), "pgh.pid");
     const pghCmd = `${pghPath} start -f ${pghPidPath} ${command} ${commandArgs.join(" ")}`;
-    const result = Bun.spawnSync(["/bin/sh", "-c", pghCmd], {
+    const _cmd = process.platform == "win32" ? [pghPath, "start", "-f", pghPidPath, command, ...commandArgs] : ["/bin/sh", "-c", pghCmd]
+    console.log("-->", _cmd)
+
+    const result = Bun.spawnSync(_cmd, {
       env: { ...process.env, BRIDGE_STATE_DIR: stateDir },
       stdout: "inherit",
       stderr: "inherit",
