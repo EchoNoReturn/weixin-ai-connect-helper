@@ -86,6 +86,10 @@ ln -sf ../../packages/plugins node_modules/@yoyojcoder-weixin-ai/plugins
 
 ### 首次使用
 
+<p align="center">
+  <img src="https://github.com/EchoNoReturn/weixin-ai-connect-helper/blob/main/wah.gif" width="600" alt="Demo">
+</p>
+
 ```bash
 # 1. 启动服务（首次运行会显示微信登录二维码）
 wah start
