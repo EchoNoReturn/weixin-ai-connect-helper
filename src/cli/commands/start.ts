@@ -1,4 +1,5 @@
 import "../../env.ts";
+import path from "node:path";
 import { startBridge } from "../../bridge.ts";
 import { loadConfig } from "../../config.ts";
 import { createLogger, initFileLogging } from "@yoyojcoder-weixin-ai/core";
@@ -115,21 +116,25 @@ function runBackground(opts: StartOptions): void {
   const stateDir = getStateDir();
 
   try {
-    // 使用 pgh 启动后台进程
-    const child = Bun.spawn([pghPath, "start", "-f", getPidPath(), command, ...commandArgs], {
-      stdout: "ignore",
-      stderr: "ignore",
-      stdin: "ignore",
+    // pgh 使用独立的 pid 文件（pgh.pid），与 bridge.pid 分开。
+    // bridge.pid 由前台进程自己写入，避免 pgh 写入的中间进程 PID
+    // 导致前台进程 isRunning() 误判。
+    const pghPidPath = path.join(getStateDir(), "pgh.pid");
+    const pghCmd = `${pghPath} start -f ${pghPidPath} ${command} ${commandArgs.join(" ")}`;
+    const result = Bun.spawnSync(["/bin/sh", "-c", pghCmd], {
       env: { ...process.env, BRIDGE_STATE_DIR: stateDir },
-      detached: true,
-    } as any);
+      stdout: "inherit",
+      stderr: "inherit",
+    });
 
-    child.unref();
+    if (result.exitCode !== 0) {
+      console.error(`pgh 退出码 ${result.exitCode}`);
+      process.exit(result.exitCode ?? 1);
+    }
 
-    console.log(`桥已在后台启动 (PID: ${child.pid})`);
-    console.log(`停止: wah stop`);
-    console.log(`状态: wah status`);
-    process.exit(0);
+    console.log("桥已在后台启动");
+    console.log("停止: wah stop");
+    console.log("状态: wah status");
   } catch (error) {
     console.error("pgh 启动失败:", error);
     process.exit(1);
