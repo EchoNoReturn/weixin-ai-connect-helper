@@ -30,6 +30,7 @@ export class AcpAgent {
       stdio: ["pipe", "pipe", "inherit"],
       env: process.env,
       cwd: cfg.cwd,
+      windowsHide: true,
     });
     proc.on("error", (err) => console.error(`[acp:${id}] 进程错误:`, err));
     proc.on("exit", (code) =>
