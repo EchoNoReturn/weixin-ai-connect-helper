@@ -1,6 +1,6 @@
 {
   "name": "weixin-ai-connect-helper",
-  "version": "0.0.3-Beta",
+  "version": "0.0.4-Beta",
   "private": true,
   "type": "module",
   "workspaces": ["packages/*", "app/*"],
