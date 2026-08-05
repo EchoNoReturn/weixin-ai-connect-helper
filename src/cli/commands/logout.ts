@@ -6,6 +6,7 @@ import {
   getSyncBufFilePath,
 } from "@yoyojcoder-weixin-ai/transport";
 import { getDb } from "@yoyojcoder-weixin-ai/core";
+import { unlinkSync } from "node:fs";
 
 const STATE_DIR = process.env.OPENCLAW_STATE_DIR!;
 const ACCOUNTS_DIR = path.join(STATE_DIR, "openclaw-weixin", "accounts");
@@ -30,7 +31,7 @@ export async function execLogout(): Promise<void> {
 
     // 2. 删除账号数据文件
     const accountFile = path.join(ACCOUNTS_DIR, `${id}.json`);
-    Bun.spawnSync(["rm", "-f", accountFile]);
+    unlinkSync(accountFile);
 
     // 3. 清理 SQLite 中该账号的 sessions
     try {
