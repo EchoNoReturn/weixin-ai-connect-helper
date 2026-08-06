@@ -1,0 +1,106 @@
+name: Bug Report
+description: 提交 bug 报告
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你提交 bug 报告！请尽量填写以下信息，以便我们更快地定位和修复问题。
+
+  - type: input
+    id: version
+    attributes:
+      label: Wah 版本
+      description: "运行 `wah --version` 获取版本号"
+      placeholder: "例如: 1.0.0-beta.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows (x86_64)
+        - Linux (x86_64)
+    validations:
+      required: true
+
+  - type: input
+    id: agent
+    attributes:
+      label: 使用的 Agent
+      description: "你使用的是哪个 Agent？"
+      placeholder: "例如: opencode / claude-code / codex"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 清晰地描述你遇到的问题
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 描述如何复现这个问题
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 描述你期望发生什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 描述实际发生了什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志
+      description: "如果有错误日志，请粘贴在此处（可以运行 `wah status` 查看日志路径）"
+      render: shell
+
+  - type: textarea
+    id: config
+    attributes:
+      label: 配置文件
+      description: "如果与配置相关，请粘贴你的 `bridge.config.json`（脱敏后）"
+      render: json
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: 安装方式
+      options:
+        - 快速安装脚本
+        - 手动下载
+        - 从源码安装
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 补充信息
+      description: 其他你认为有用的信息
