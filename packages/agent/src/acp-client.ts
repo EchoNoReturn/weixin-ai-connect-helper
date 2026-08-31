@@ -13,6 +13,9 @@ export type ChunkHandler = (fullText: string) => void;
 export class AcpAgent {
   private sessions = new Map<string, acp.ActiveSession>();
   private queues = new Map<string, Promise<unknown>>();
+  private exited = false;
+  private disposed = false;
+  private readonly exitListeners = new Set<() => void>();
 
   private constructor(
     readonly id: string,
@@ -33,9 +36,6 @@ export class AcpAgent {
       windowsHide: true,
     });
     proc.on("error", (err) => console.error(`[acp:${id}] 进程错误:`, err));
-    proc.on("exit", (code) =>
-      console.error(`[acp:${id}] 进程退出 code=${code}`),
-    );
 
     const stream = acp.ndJsonStream(
       Writable.toWeb(proc.stdin!) as WritableStream<Uint8Array>,
@@ -59,17 +59,29 @@ export class AcpAgent {
       });
 
     const conn = app.connect(stream);
-    const init = await conn.agent.request(acp.methods.agent.initialize, {
-      protocolVersion: acp.PROTOCOL_VERSION,
-      clientCapabilities: {
-        fs: { readTextFile: false, writeTextFile: false },
-        terminal: false,
-      },
-      clientInfo: { name: "weixin-ai-connect-helper", version: "0.1.0" },
-    });
-    console.log(`[acp:${id}] agent 已连接 (protocol v${init.protocolVersion})`);
-
-    return new AcpAgent(id, cfg, proc, conn);
+    try {
+      const init = await conn.agent.request(acp.methods.agent.initialize, {
+        protocolVersion: acp.PROTOCOL_VERSION,
+        clientCapabilities: {
+          fs: { readTextFile: false, writeTextFile: false },
+          terminal: false,
+        },
+        clientInfo: { name: "weixin-ai-connect-helper", version: "0.1.0" },
+      });
+      const agent = new AcpAgent(id, cfg, proc, conn);
+      proc.on("exit", (code) => {
+        agent.exited = true;
+        console.error(`[acp:${id}] 进程退出 code=${code}`);
+        for (const listener of agent.exitListeners) listener();
+        agent.exitListeners.clear();
+      });
+      console.log(`[acp:${id}] agent 已连接 (protocol v${init.protocolVersion})`);
+      return agent;
+    } catch (error) {
+      conn.close();
+      if (!proc.killed) proc.kill();
+      throw error;
+    }
   }
 
   prompt(userKey: string, text: string, onChunk: ChunkHandler): Promise<PromptResult> {
@@ -79,6 +91,9 @@ export class AcpAgent {
       () => this.runTurn(userKey, text, onChunk),
     );
     this.queues.set(userKey, current);
+    void current.finally(() => {
+      if (this.queues.get(userKey) === current) this.queues.delete(userKey);
+    }).catch(() => {});
     return current;
   }
 
@@ -90,16 +105,15 @@ export class AcpAgent {
     const session = await this.getSession(userKey);
 
     let full = "";
-    let promptFailure: unknown = null;
     const promptPromise = session.prompt(text);
-    promptPromise.catch((err: unknown) => {
-      promptFailure = err;
-    });
+    const promptFailure = promptPromise.then(
+      () => new Promise<never>(() => {}),
+      (error: unknown) => Promise.reject(error),
+    );
 
     let stopReason = "unknown";
     while (true) {
-      if (promptFailure) throw promptFailure;
-      const msg = await session.nextUpdate();
+      const msg = await Promise.race([session.nextUpdate(), promptFailure]);
       if (msg.kind === "stop") {
         stopReason = msg.stopReason;
         break;
@@ -127,9 +141,25 @@ export class AcpAgent {
     return session;
   }
 
+  get isAlive(): boolean {
+    return !this.exited && !this.disposed;
+  }
+
+  onExit(listener: () => void): () => void {
+    if (this.exited) {
+      listener();
+      return () => {};
+    }
+    this.exitListeners.add(listener);
+    return () => this.exitListeners.delete(listener);
+  }
+
   async dispose(): Promise<void> {
+    if (this.disposed) return;
+    this.disposed = true;
     for (const session of this.sessions.values()) session.dispose();
     this.sessions.clear();
+    this.queues.clear();
     this.conn.close();
     if (!this.proc.killed) this.proc.kill();
   }
