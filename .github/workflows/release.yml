@@ -61,6 +61,16 @@ jobs:
           done
           ls -la node_modules/@yoyojcoder-weixin-ai/
 
+      - name: Type check
+        run: bun run typecheck
+
+      - name: Test TypeScript packages and integration flow
+        run: bun run test
+
+      - name: Test and vet process helper
+        working-directory: tool/pgh
+        run: go test ./... && go vet ./...
+
       # 统一构建管线：version → pgh（Go 原生编译）→ wah（bun 原生 compile），产物均在 dist/
       - name: Build (version + pgh + wah)
         run: bun run build
@@ -176,9 +186,9 @@ jobs:
 
             ```jsonc
             {
-              "allowFrom": [],           // 允许使用的微信用户ID列表，留空则自动绑定第一个发消息的用户
+              "allowFrom": [],           // 留空时需要在本机通过 wah access approve 审批
               "defaultAgent": "opencode", // 默认使用的 AI Agent
-              "autoApprove": true         // 自动批准 Agent 的工具调用请求
+              "autoApprove": false        // 是否自动批准 Agent 的工具调用请求
             }
             ```
 
