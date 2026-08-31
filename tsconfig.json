@@ -18,5 +18,6 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
     "types": ["bun", "mri"]
-  }
+  },
+  "exclude": ["app/web"]
 }

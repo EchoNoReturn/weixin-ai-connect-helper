@@ -6,7 +6,7 @@
       "name": "weixin-ai-connect-helper",
       "dependencies": {
         "@agentclientprotocol/sdk": "^1.1.0",
-        "@tencent-weixin/openclaw-weixin": "^2.4.6",
+        "@tencent-weixin/openclaw-weixin": "2.4.6",
         "commander": "^15.0.0",
         "mri": "^1.2.0",
       },
@@ -60,7 +60,7 @@
       "name": "@yoyojcoder-weixin-ai/transport",
       "version": "0.1.0",
       "dependencies": {
-        "@tencent-weixin/openclaw-weixin": "^2.4.6",
+        "@tencent-weixin/openclaw-weixin": "2.4.6",
         "@yoyojcoder-weixin-ai/core": "workspace:*",
       },
     },

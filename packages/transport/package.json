@@ -6,6 +6,6 @@
   "types": "src/index.ts",
   "dependencies": {
     "@yoyojcoder-weixin-ai/core": "workspace:*",
-    "@tencent-weixin/openclaw-weixin": "^2.4.6"
+    "@tencent-weixin/openclaw-weixin": "2.4.6"
   }
 }

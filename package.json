@@ -17,14 +17,14 @@
     "build:pgh": "bun run scripts/build.ts pgh",
     "postinstall": "bun run scripts/postinstall.ts",
     "test:acp": "bun run scripts/test-acp.ts",
-    "test": "bun test packages/ scripts/",
+    "test": "bun test packages/ scripts/ src/__tests__/",
     "test:unit": "bun test packages/",
-    "test:integration": "bun run scripts/test-integration.ts",
-    "typecheck": "bunx tsc --noEmit"
+    "test:integration": "bun test ./scripts/bridge.integration.test.ts",
+    "typecheck": "bunx tsc --noEmit && bunx tsc --noEmit -p app/web/tsconfig.json"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.1.0",
-    "@tencent-weixin/openclaw-weixin": "^2.4.6",
+    "@tencent-weixin/openclaw-weixin": "2.4.6",
     "commander": "^15.0.0",
     "mri": "^1.2.0"
   },
