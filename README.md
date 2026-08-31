@@ -13,7 +13,7 @@
 ## 环境要求
 
 - [Bun](https://bun.sh) ≥ 1.1（从源码安装时需要）
-- Node.js 18+（部分依赖需要）
+- Node.js 22+（`@tencent-weixin/openclaw-weixin` 2.4.6 的最低要求）
 - 微信 bot 账号（首次启动扫码登录）
 - 已安装的 Agent 工具（opencode / claude-code / codex）
 
@@ -28,13 +28,15 @@ curl -fsSL https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-help
 安装脚本会自动：
 - 检测你的系统架构（Intel/Apple Silicon）
 - 下载最新版本
-- 安装到 `~/.wah` 目录
+- 将程序安装到 `~/.local/bin`，将登录凭证、配置、数据库和日志保存在 `~/.wah`
 - 自动配置 PATH 环境变量
 
 自定义安装目录：
 ```bash
 INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main/install.sh | bash
 ```
+
+可通过 `BRIDGE_STATE_DIR` 自定义状态目录。卸载只删除程序文件，默认保留状态数据。
 
 卸载：
 ```bash
@@ -47,6 +49,8 @@ curl -fsSL https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-help
 ```powershell
 irm https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main/install.ps1 | iex
 ```
+
+程序默认安装到 `%LOCALAPPDATA%\Programs\wah`，状态数据保存在 `%USERPROFILE%\.wah`；卸载默认保留状态数据。
 
 卸载：
 ```powershell
@@ -147,6 +151,13 @@ wah plugins enable session-notify
 
 # 禁用插件
 wah plugins disable session-notify
+
+# 查看待审批的微信用户
+wah access list pending
+
+# 批准或撤销用户访问
+wah access approve '<user-id>@im.wechat'
+wah access revoke '<user-id>@im.wechat'
 ```
 
 ## 在微信中使用
@@ -168,7 +179,7 @@ wah plugins disable session-notify
 
 ```jsonc
 {
-  "allowFrom": [],               // 微信用户 ID 白名单，空=自动绑定首个用户
+  "allowFrom": [],               // 微信用户 ID 白名单；空=使用本机 access 审批记录
   "defaultAgent": "opencode",    // 无前缀消息的默认 agent
   "agents": {
     "opencode": {
@@ -178,13 +189,22 @@ wah plugins disable session-notify
       "notifyPolicy": "none"     // "none" | "own" | "all"
     }
   },
-  "autoApprove": true,           // 自动批准 agent 权限请求（PoC）
+  "autoApprove": false,          // 是否自动批准 agent 权限请求
   "webPort": 3210,               // Web 控制台端口
   "pluginsFile": "plugins.json", // 插件配置文件
   "streamFlushMinChars": 200,    // 流式合并：最小字符数
-  "streamFlushIdleMs": 3000      // 流式合并：空闲时间（ms）
+  "streamFlushIdleMs": 3000,     // 流式合并：空闲时间（ms）
+  "channels": [
+    { "type": "weixin", "id": "weixin-main", "enabled": true }
+    // 备用本地入口：{ "type": "webhook", "id": "webhook-local", "port": 3211 }
+  ]
 }
 ```
+
+`channels` 可以同时启用多个接入。Webhook 接收 `POST /v1/messages`，请求体为
+`{"senderId":"local-user","text":"..."}`。默认只监听 `127.0.0.1`；监听其他地址时必须配置
+`tokenEnv`，并通过对应环境变量提供 Bearer Token。Webhook 用户的审批键为
+`<channel-id>:<sender-id>`。
 
 ### plugins.json
 

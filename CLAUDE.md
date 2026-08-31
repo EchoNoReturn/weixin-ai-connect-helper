@@ -129,4 +129,5 @@ WeChat-to-AI-agent bridge. Reuses `@tencent-weixin/openclaw-weixin` protocol lay
 - `contextToken` must be forwarded on every reply (WeChat session correlation).
 - Text messages chunked at 4000 chars. Stream coalescing: flush at ≥200 chars AND ≥3s idle.
 - `allowFrom` whitelist is the security boundary — agent has shell-level access.
-- `autoApprove: true` (PoC default) means agent tool calls execute without confirmation.
+- `allowFrom: []` requires local approval with `wah access approve <user-id>` before a sender can use an agent.
+- `autoApprove` defaults to `false`; enabling it means agent tool calls execute without confirmation.

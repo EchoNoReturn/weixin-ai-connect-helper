@@ -1,17 +1,17 @@
-# weixin-ai-connect-helper 设计文档 v2
+# weixin-ai-connect-helper 设计文档 v3
 
-> 在微信里直接使用本机的 AI Coding Agent（opencode / Claude Code / Codex）。
+> 以微信为主渠道、支持可扩展接入的本机 AI Coding Agent 桥。
 > 本文档记录完整架构、插件系统、Web 控制台与迁移方案。
 
 ## 1. 目标
 
-把微信变成 AI Coding Agent 的"远程终端"，以**消息生命周期管道**为核心架构：
+把微信作为首选“远程终端”，同时避免核心流程绑定微信私有协议。所有接入先转换为统一消息，再进入**消息生命周期管道**：
 
 ```
-微信消息 → [1] 接收 → [2] 路由 → [3] 上下文 → [4] 执行 → [5] 发送 → 微信回复
+ChannelAdapter → IncomingMessage → 路由 → 上下文 → ACP 执行 → OutgoingMessage → ChannelAdapter
 ```
 
-每个阶段有明确的输入/输出类型，插件 hook 挂在阶段之间。附带 Web 控制台：配置管理、Agent 安装、实时日志。
+`ChannelAdapter` 负责协议、认证、收发和平台专属回复上下文；核心只认识 `channelId`、会话、发送者与文本。目前实现 `WeixinChannelAdapter` 和本地请求—响应 `LocalWebhookChannelAdapter`。
 
 ## 2. 消息生命周期管道
 
@@ -25,8 +25,8 @@
 
 ### Stage 1：接收（Receive）
 
-**输入：** 原始微信消息（ilink 协议格式）
-**输出：** `ParsedMessage`
+**输入：** 渠道原始消息
+**输出：** `IncomingMessage`（`ParsedMessage` 是兼容类型别名）
 
 ```
 ilink getUpdates → 过滤 → 标准化 → hook: onReceive
@@ -37,17 +37,20 @@ ilink getUpdates → 过滤 → 标准化 → hook: onReceive
 - hook 可修改/过滤消息（如敏感词拦截、消息预处理）
 
 ```ts
-interface ParsedMessage {
-  fromUserId: string;     // xxx@im.wechat
+interface IncomingMessage {
+  channelId: string;
+  platform: string;
+  conversationId: string;
+  senderId: string;
   text: string;
-  contextToken?: string;
   receivedAt: number;
+  replyContext?: Record<string, unknown>; // 如微信 contextToken
 }
 ```
 
 ### Stage 2：路由（Route）
 
-**输入：** `ParsedMessage`
+**输入：** `IncomingMessage`
 **输出：** `RoutedMessage`
 
 ```
@@ -55,7 +58,7 @@ interface ParsedMessage {
 ```
 
 - 前缀解析确定 agentId，无前缀走用户绑定的默认 agent
-- `(userId, agentId) → session` 映射，同一用户对同一 agent 是连续对话
+- `(channelId, conversationId, agentId) → session` 映射；默认微信实例保留旧 Session ID 兼容
 - hook 可重写路由（如负载均衡、限流）
 
 ```ts
@@ -123,7 +126,7 @@ interface AgentResult {
 ### Stage 5：发送（Send）
 
 **输入：** `AgentResult`
-**输出：** 发送到微信
+**输出：** 发送到消息来源渠道
 
 ```
 格式化回复 → 分块(4000char) → hook: beforeSend → sendMessage
@@ -131,7 +134,7 @@ interface AgentResult {
 
 - 流式合并剩余文本，格式化最终回复
 - 超 4000 字符自动分块
-- 携带 `contextToken`（微信会话上下文关联）
+- 原样携带 `replyContext`；微信适配器从中读取 `contextToken`
 - hook 可修改输出（如添加后缀、格式转换）
 
 ### 完整数据流
@@ -171,25 +174,27 @@ interface BridgePlugin {
   version?: string;
 
   // Stage 1: 接收
-  onReceive?: (msg: ParsedMessage, next: () => Promise<void>) => Promise<ParsedMessage>;
+  onReceive?: TransformHook<ParsedMessage>;
 
   // Stage 2: 路由
-  onRoute?: (msg: RoutedMessage, next: () => Promise<void>) => Promise<RoutedMessage>;
+  onRoute?: TransformHook<RoutedMessage>;
 
   // Stage 3: 上下文
-  beforePrompt?: (ctx: PromptContext, next: () => Promise<void>) => Promise<PromptContext>;
+  beforePrompt?: TransformHook<PromptContext>;
 
   // Stage 4: 执行
-  onPrompt?: (result: AgentResult, next: () => Promise<void>) => Promise<AgentResult>;
+  onPrompt?: TransformHook<AgentResult>;
   onSessionEnd?: (ctx: SessionEndContext) => Promise<void>;
 
   // Stage 5: 发送
-  beforeSend?: (text: string, next: () => Promise<void>) => Promise<string>;
+  beforeSend?: TransformHook<string>;
 
   // 生命周期事件（非消息流）
   onAgentReady?: (agentId: string) => Promise<void>;
   onAgentExit?: (agentId: string, code: number | null) => Promise<void>;
 }
+
+type TransformHook<T> = (value: T) => Promise<T | null> | T | null;
 
 interface SessionEndContext {
   agentId: string;
@@ -240,33 +245,28 @@ async function loadPlugins(file: string): Promise<PluginRegistry> {
   };
 }
 
-// 管道中每个阶段的执行方式
-async function runStage<I, O>(
-  stageName: string,
-  hooks: Array<{ name: string; handler: (data: I, next: () => Promise<void>) => Promise<I> }>,
-  initial: I,
-  core: (data: I) => Promise<O>,
-): Promise<O> {
-  let idx = 0;
-  const next = async (): Promise<void> => {
-    if (idx < hooks.length) {
-      const { name, handler } = hooks[idx++];
-      const result = await handler(initial, next);
-      Object.assign(initial, result);
-      await next();
-    }
-  };
-  await next();
-  return core(initial);
+// Hook 按注册顺序转换数据；返回 null 表示拦截后续管道。
+async function runHooks<T>(hooks: PluginEntry<T>[], initial: T): Promise<T | null> {
+  let current: T | null = initial;
+  for (const { handler } of hooks) {
+    if (current === null) return null;
+    current = await handler(current);
+  }
+  return current;
 }
 
 // 管道编排
 async function runPipeline(msg: RawMessage): Promise<void> {
-  const parsed   = await runStage("receive",   registry.onReceive,   msg,    stage1Core);
-  const routed   = await runStage("route",     registry.onRoute,     parsed, stage2Core);
-  const ctx      = await runStage("context",   registry.beforePrompt,routed, stage3Core);
-  const result   = await runStage("execute",   registry.onPrompt,    ctx,    stage4Core);
-  await           runStage("send",      registry.beforeSend,   result, stage5Core);
+  const routed = await runStage(registry.onReceive, msg, stage1Core);
+  if (!routed) return;
+  const ctx = await runStage(registry.onRoute, routed, stage2Core);
+  if (!ctx) return;
+  const prompt = await runHooks(registry.beforePrompt, await stage3Core(ctx));
+  if (!prompt) return;
+  const result = await runHooks(registry.onPrompt, await stage4Core(prompt));
+  if (!result) return;
+  const text = await runHooks(registry.beforeSend, result.text);
+  if (text !== null) await stage5Core({ ...result, text });
 }
 ```
 
@@ -373,14 +373,11 @@ import type { ParsedMessage } from "@weixin-bridge/core";
 const MAX_LENGTH = 5000;
 const STRIP_EMOJI = false;
 
-export default function onReceive(
-  msg: ParsedMessage,
-  next: () => Promise<void>,
-): Promise<ParsedMessage> {
+export default function onReceive(msg: ParsedMessage): ParsedMessage {
   if (msg.text.length > MAX_LENGTH) {
     msg.text = msg.text.slice(0, MAX_LENGTH);
   }
-  return next();
+  return msg;
 }
 ```
 
@@ -390,12 +387,9 @@ import type { PromptContext } from "@weixin-bridge/core";
 
 const SYSTEM_PROMPT = "你是一个 AI 助手，通过微信与用户交互。";
 
-export default function beforePrompt(
-  ctx: PromptContext,
-  next: () => Promise<void>,
-): Promise<PromptContext> {
+export default function beforePrompt(ctx: PromptContext): PromptContext {
   ctx.systemPrompt = SYSTEM_PROMPT;
-  return next();
+  return ctx;
 }
 ```
 
@@ -533,8 +527,16 @@ CREATE TABLE messages (
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
+CREATE TABLE access_users (
+  user_id TEXT PRIMARY KEY,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'revoked')),
+  first_seen_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
 CREATE INDEX idx_messages_session ON messages(session_id, created_at);
 CREATE INDEX idx_sessions_user_agent ON sessions(user_id, agent_id);
+CREATE INDEX idx_access_users_status ON access_users(status, updated_at);
 ```
 
 ### 5.2 JSON/JSONC（插件配置）
@@ -547,12 +549,12 @@ CREATE INDEX idx_sessions_user_agent ON sessions(user_id, agent_id);
 
 ```jsonc
 {
-  "allowFrom": [],
+  "allowFrom": [],               // 空=使用本机 access 审批记录
   "defaultAgent": "opencode",
   "agents": {
     "opencode": { "command": "opencode", "args": ["acp"], "cwd": "." }
   },
-  "autoApprove": true,
+  "autoApprove": false,
   "webPort": 3210,              // Web 控制台端口
   "pluginsFile": "plugins.json" // 插件配置文件路径
 }
@@ -695,7 +697,7 @@ transport + orchestration + agent ← src/index.ts（主进程组装管道）
 
 ```jsonc
 {
-  "allowFrom": [],               // 微信用户ID白名单，空=自动绑定首个用户
+  "allowFrom": [],               // 微信用户ID白名单，空=使用本机 access 审批记录
   "defaultAgent": "opencode",
   "agents": {
     "opencode": {
@@ -705,7 +707,7 @@ transport + orchestration + agent ← src/index.ts（主进程组装管道）
       "notifyPolicy": "none"    // "none" | "own" | "all"
     }
   },
-  "autoApprove": true,
+  "autoApprove": false,
   "webPort": 3210,              // Web 控制台端口
   "pluginsFile": "plugins.json", // 插件配置文件路径
   "streamFlushMinChars": 200,
@@ -742,7 +744,8 @@ bun run dev:web                    # Web 控制台开发模式（Vite dev server
 
 - `allowFrom` 白名单是安全边界，agent 具有 shell 级别访问权限
 - Web 控制台默认只监听 localhost（`127.0.0.1`）
-- `autoApprove: true` 是 PoC 行为，生产环境应通过 Web 控制台关闭
+- `allowFrom` 为空时，未知用户只会进入 pending，必须通过本机 CLI 审批
+- `autoApprove` 默认关闭；开启后 agent 工具调用无需确认
 
 ### 9.4 contextToken
 

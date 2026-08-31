@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "weixin-ai-connect-helper 整体架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/EchoNoReturn/weixin-ai-connect-helper",
+      "revision": "733cd489161d043b59bde125bfec78636f951e68"
+    },
+    "views": [
+      {
+        "id": "message-path",
+        "label": "消息主链路",
+        "focus": ["wechat", "transport", "pipeline", "orchestration", "agentRuntime", "localAgents"],
+        "note": "从微信长轮询接收消息，经五阶段管道与 ACP 执行后返回微信。"
+      },
+      {
+        "id": "state-security",
+        "label": "状态与安全边界",
+        "focus": ["routerGuard", "orchestration", "sqlite", "agentRuntime"],
+        "note": "allowFrom 是访问边界；会话历史保存在本地 SQLite，Agent 拥有本机工具能力。"
+      },
+      {
+        "id": "extension-control",
+        "label": "扩展与控制面",
+        "focus": ["controlPlane", "config", "plugins", "pipeline"],
+        "note": "CLI/daemon 负责启动，配置文件和插件 hooks 调整运行时行为，Web 控制台作为辅助控制面运行。"
+      }
+    ],
+    "viewBox": [1090, 460]
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [48, 36],
+    "cols": 4,
+    "gapX": 100,
+    "gapY": 52,
+    "cellW": 180,
+    "cellH": 72
+  },
+  "components": [
+    {
+      "id": "wechat",
+      "type": "external",
+      "label": "微信用户",
+      "sublabel": "文本消息 / 回复",
+      "row": 1,
+      "col": 0,
+      "sources": [{ "path": "packages/transport/src/weixin/inbound.ts", "label": "消息来源约束" }]
+    },
+    {
+      "id": "transport",
+      "type": "cloud",
+      "label": "微信传输层",
+      "sublabel": "openclaw-weixin / ilink",
+      "tag": "长轮询 + 4000 字分块",
+      "row": 1,
+      "col": 1,
+      "sources": [
+        { "path": "packages/transport/src/weixin/inbound.ts", "label": "入站长轮询" },
+        { "path": "packages/transport/src/weixin/outbound.ts", "label": "出站与 contextToken" }
+      ]
+    },
+    {
+      "id": "pipeline",
+      "type": "backend",
+      "label": "五阶段 Pipeline",
+      "sublabel": "五阶段生命周期管道",
+      "row": 1,
+      "col": 2,
+      "sources": [
+        { "path": "src/bridge.ts", "label": "运行时装配" },
+        { "path": "packages/core/src/pipeline.ts", "label": "阶段编排" }
+      ]
+    },
+    {
+      "id": "orchestration",
+      "type": "backend",
+      "label": "路由与上下文",
+      "sublabel": "Router / Context",
+      "row": 1,
+      "col": 3,
+      "sources": [
+        { "path": "packages/orchestration/src/router.ts", "label": "Agent 路由" },
+        { "path": "packages/orchestration/src/context-builder.ts", "label": "历史上下文" },
+        { "path": "packages/orchestration/src/session-manager.ts", "label": "会话持久化" }
+      ]
+    },
+    {
+      "id": "agentRuntime",
+      "type": "backend",
+      "label": "ACP Agent 运行时",
+      "sublabel": "ProcessManager / AcpAgent",
+      "tag": "按用户串行 Prompt",
+      "row": 2,
+      "col": 2,
+      "sources": [
+        { "path": "packages/agent/src/process-manager.ts", "label": "进程复用" },
+        { "path": "packages/agent/src/acp-client.ts", "label": "ACP 会话与流式响应" }
+      ]
+    },
+    {
+      "id": "localAgents",
+      "type": "external",
+      "label": "本地 Coding Agents",
+      "sublabel": "三类 ACP Agent",
+      "tag": "shell 级能力",
+      "row": 2,
+      "col": 1,
+      "sources": [{ "path": "bridge.config.json", "label": "Agent 命令配置" }]
+    },
+    {
+      "id": "routerGuard",
+      "type": "security",
+      "label": "访问控制",
+      "sublabel": "allowFrom / 首用户自动绑定",
+      "row": 0,
+      "col": 3,
+      "sources": [{ "path": "packages/orchestration/src/router.ts", "label": "白名单边界" }]
+    },
+    {
+      "id": "plugins",
+      "type": "messagebus",
+      "label": "插件 Hooks",
+      "sublabel": "过滤 / 系统提示 / 会话通知",
+      "row": 0,
+      "col": 2,
+      "sources": [
+        { "path": "packages/core/src/plugin-system.ts", "label": "Hook 注册与执行" },
+        { "path": "plugins.json", "label": "插件启用配置" }
+      ]
+    },
+    {
+      "id": "sqlite",
+      "type": "database",
+      "label": "bridge.db",
+      "sublabel": "SQLite WAL",
+      "row": 2,
+      "col": 3,
+      "sources": [{ "path": "packages/core/src/db.ts", "label": "sessions / messages" }]
+    },
+    {
+      "id": "controlPlane",
+      "type": "frontend",
+      "label": "CLI / Web 控制面",
+      "sublabel": "wah daemon · React/Vite",
+      "row": 0,
+      "col": 0,
+      "sources": [
+        { "path": "src/cli/index.ts", "label": "CLI 入口" },
+        { "path": "src/index.ts", "label": "Bridge 入口" },
+        { "path": "src/web-server.ts", "label": "Web 进程启动" }
+      ]
+    },
+    {
+      "id": "config",
+      "type": "database",
+      "label": "运行配置",
+      "sublabel": "JSON 运行时配置",
+      "row": 0,
+      "col": 1,
+      "sources": [{ "path": "src/config.ts", "label": "默认值与加载" }]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "Agent 工具权限边界",
+      "wraps": ["agentRuntime", "localAgents"]
+    }
+  ],
+  "connections": [
+    { "id": "inboundPoll", "from": "wechat", "to": "transport", "label": "ilink 消息", "variant": "emphasis" },
+    { "id": "parsedMessage", "from": "transport", "to": "pipeline", "label": "ParsedMessage", "variant": "emphasis" },
+    { "id": "routeContext", "from": "pipeline", "to": "orchestration", "label": "路由 / 上下文", "variant": "emphasis" },
+    { "id": "promptExecute", "from": "orchestration", "to": "agentRuntime", "label": "PromptContext", "variant": "emphasis" },
+    { "id": "acpProcess", "from": "agentRuntime", "to": "localAgents", "label": "ACP NDJSON", "variant": "emphasis" },
+    { "id": "guardRoute", "from": "routerGuard", "to": "orchestration", "label": "白名单校验", "variant": "security", "labelAt": [948, 110] },
+    { "id": "historyStore", "from": "orchestration", "to": "sqlite", "label": "会话与消息读写", "labelAt": [948, 234] },
+    { "id": "hookPipeline", "from": "plugins", "to": "pipeline", "label": "阶段间串行 hooks", "variant": "dashed", "labelAt": [668, 110] },
+    { "id": "configBoot", "from": "config", "to": "controlPlane", "label": "启动配置" },
+    { "id": "pluginConfig", "from": "config", "to": "plugins", "label": "启用顺序" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "消息主链路",
+      "items": [
+        "微信文本经 getUpdates 长轮询进入五阶段 Pipeline",
+        "Agent 回复按 4000 字分块并携带 contextToken 返回微信"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "会话与执行",
+      "items": [
+        "每个 (userId, agentId) 映射为独立会话",
+        "ProcessManager 复用 Agent 子进程，单用户 Prompt 串行执行"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "安全边界",
+      "items": [
+        "allowFrom 为空时仅自动绑定首位消息发送者",
+        "autoApprove=true 会批准 Agent 工具调用，需谨慎配置白名单"
+      ]
+    }
+  ]
+}
