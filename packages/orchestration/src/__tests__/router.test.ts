@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { Router } from "../router.ts";
 import type { BridgeConfig } from "@yoyojcoder-weixin-ai/core";
+import type { AccessStatus, AccessStore } from "../access-manager.ts";
 
 function makeConfig(overrides?: Partial<BridgeConfig>): BridgeConfig {
   return {
@@ -12,12 +13,36 @@ function makeConfig(overrides?: Partial<BridgeConfig>): BridgeConfig {
     pluginsFile: "plugins.json",
     streamFlushMinChars: 200,
     streamFlushIdleMs: 3000,
+    channels: [{ type: "weixin", id: "weixin-main" }],
     ...overrides,
   };
 }
 
 function makeMsg(userId: string, text: string) {
-  return { fromUserId: userId, text, receivedAt: Date.now() };
+  return {
+    channelId: "weixin-main",
+    platform: "weixin",
+    conversationId: userId,
+    senderId: userId,
+    text,
+    receivedAt: Date.now(),
+  };
+}
+
+class MemoryAccessStore implements AccessStore {
+  private statuses = new Map<string, AccessStatus>();
+
+  getStatus(userId: string): AccessStatus | undefined {
+    return this.statuses.get(userId);
+  }
+
+  recordPending(userId: string): void {
+    if (!this.statuses.has(userId)) this.statuses.set(userId, "pending");
+  }
+
+  approve(userId: string): void {
+    this.statuses.set(userId, "approved");
+  }
 }
 
 describe("Router", () => {
@@ -61,17 +86,40 @@ describe("Router", () => {
     expect(result.agentId).toBe("claude");
   });
 
-  it("auto-binds first user when allowFrom empty", () => {
-    const router = new Router(makeConfig({ allowFrom: [] }));
+  it("records an unknown user as pending when allowFrom is empty", () => {
+    const access = new MemoryAccessStore();
+    const router = new Router(makeConfig({ allowFrom: [] }), access);
+    expect(() => router.parseRoute(makeMsg("first@im.wechat", "hi")))
+      .toThrow("非白名单用户");
+    expect(access.getStatus("first@im.wechat")).toBe("pending");
+  });
+
+  it("allows a locally approved user when allowFrom is empty", () => {
+    const access = new MemoryAccessStore();
+    access.approve("first@im.wechat");
+    const router = new Router(makeConfig({ allowFrom: [] }), access);
     const result = router.parseRoute(makeMsg("first@im.wechat", "hi"));
     expect(result.agentId).toBe("opencode");
-    expect(() => router.parseRoute(makeMsg("second@im.wechat", "hi")))
-      .toThrow("非白名单用户");
   });
 
   it("generates correct sessionId", () => {
     const router = new Router(makeConfig());
     const result = router.parseRoute(makeMsg("user1@im.wechat", "hello"));
     expect(result.sessionId).toBe("user1@im.wechat:opencode");
+  });
+
+  it("namespaces access, binding, and sessions for other channels", () => {
+    const access = new MemoryAccessStore();
+    access.approve("webhook-local:user1");
+    const router = new Router(makeConfig({ allowFrom: [] }), access);
+    const message = {
+      ...makeMsg("user1", "/cc switch"),
+      channelId: "webhook-local",
+      platform: "webhook",
+      conversationId: "room-1",
+    };
+    const routed = router.parseRoute(message);
+    expect(routed.sessionId).toBe("webhook-local:room-1:claude");
+    expect(routed.agentId).toBe("claude");
   });
 });

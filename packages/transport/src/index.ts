@@ -1,6 +1,8 @@
 export { ensureWeixinLogin, checkWeixinCredentials, type WeixinCredentials } from "./weixin/login.ts";
-export { runInboundLoop } from "./weixin/inbound.ts";
+export { runInboundLoop, type WeixinInboundMessage } from "./weixin/inbound.ts";
 export { WeixinOutbound } from "./weixin/outbound.ts";
+export { WeixinChannelAdapter, type WeixinChannelAdapterOptions } from "./weixin/adapter.ts";
+export { LocalWebhookChannelAdapter, type LocalWebhookChannelOptions } from "./webhook/adapter.ts";
 export {
   getUpdates,
   sendTextMessage,

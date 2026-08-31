@@ -1,9 +1,7 @@
-export interface ParsedMessage {
-  fromUserId: string;
-  text: string;
-  contextToken?: string;
-  receivedAt: number;
-}
+import type { IncomingMessage } from "./channel.ts";
+
+/** @deprecated Use IncomingMessage; kept as a source-compatible plugin type name. */
+export type ParsedMessage = IncomingMessage;
 
 export interface RoutedMessage {
   message: ParsedMessage;
@@ -43,6 +41,24 @@ export interface AgentConfig {
   notifyPolicy?: "none" | "own" | "all";
 }
 
+export interface WeixinChannelConfig {
+  type: "weixin";
+  id?: string;
+  enabled?: boolean;
+}
+
+export interface WebhookChannelConfig {
+  type: "webhook";
+  id?: string;
+  enabled?: boolean;
+  hostname?: string;
+  port?: number;
+  /** Name of the environment variable containing the bearer token. */
+  tokenEnv?: string;
+}
+
+export type ChannelConfig = WeixinChannelConfig | WebhookChannelConfig;
+
 export interface BridgeConfig {
   allowFrom: string[];
   defaultAgent: string;
@@ -52,4 +68,5 @@ export interface BridgeConfig {
   pluginsFile: string;
   streamFlushMinChars: number;
   streamFlushIdleMs: number;
+  channels: ChannelConfig[];
 }

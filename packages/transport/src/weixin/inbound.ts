@@ -7,7 +7,13 @@ import {
 } from "./api.ts";
 import type { GetUpdatesResp, WeixinMessage } from "./api.ts";
 import type { WeixinCredentials } from "./login.ts";
-import type { ParsedMessage } from "@yoyojcoder-weixin-ai/core";
+
+export interface WeixinInboundMessage {
+  fromUserId: string;
+  text: string;
+  contextToken?: string;
+  receivedAt: number;
+}
 
 const LONG_POLL_TIMEOUT_MS = 35_000;
 const MAX_CONSECUTIVE_FAILURES = 3;
@@ -33,7 +39,7 @@ function isUserTextMessage(msg: WeixinMessage): boolean {
 export async function runInboundLoop(opts: {
   creds: WeixinCredentials;
   abortSignal: AbortSignal;
-  onMessage: (msg: ParsedMessage) => Promise<void>;
+  onMessage: (msg: WeixinInboundMessage) => Promise<void>;
 }): Promise<void> {
   const { creds, abortSignal, onMessage } = opts;
   const syncFilePath = getSyncBufFilePath(creds.accountId);
@@ -75,7 +81,7 @@ export async function runInboundLoop(opts: {
 
     for (const msg of resp.msgs ?? []) {
       if (!isUserTextMessage(msg)) continue;
-      const inbound: ParsedMessage = {
+      const inbound: WeixinInboundMessage = {
         fromUserId: msg.from_user_id!,
         text: extractText(msg),
         contextToken: msg.context_token,

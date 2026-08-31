@@ -73,6 +73,12 @@ export interface HealthData {
   reconnectAttempts: number;
   startedAt: number;
   pid: number;
+  channels?: Record<string, {
+    platform: string;
+    status: string;
+    accountId?: string;
+    lastError?: string;
+  }>;
 }
 
 export function writeHealth(data: HealthData): void {

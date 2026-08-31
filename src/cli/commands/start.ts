@@ -69,6 +69,7 @@ async function runForeground(opts: StartOptions): Promise<void> {
       lastError: bridge.health.lastError,
       reconnectAttempts: bridge.health.reconnectAttempts,
       startedAt: bridge.health.startedAt,
+      channels: bridge.health.channels,
       pid: process.pid,
     });
   }, 5000);
@@ -92,6 +93,7 @@ async function runForeground(opts: StartOptions): Promise<void> {
   try {
     await bridge.loopPromise;
   } finally {
+    await bridge.shutdown();
     cleanup();
   }
 }

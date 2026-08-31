@@ -13,18 +13,19 @@ export class WeixinOutbound {
     if (token) this.contextTokens.set(userId, token);
   }
 
-  async sendText(to: string, text: string): Promise<void> {
-    const task = this.sending.then(() => this.doSend(to, text));
+  async sendText(to: string, text: string, replyContextToken?: string): Promise<string[]> {
+    const contextToken = replyContextToken ?? this.contextTokens.get(to);
+    const task = this.sending.then(() => this.doSend(to, text, contextToken));
     this.sending = task.catch((err) =>
       console.error(`[weixin] 发送失败 to=${to}:`, err),
-    );
-    await task;
+    ).then(() => undefined);
+    return task;
   }
 
-  private async doSend(to: string, text: string): Promise<void> {
-    const contextToken = this.contextTokens.get(to);
+  private async doSend(to: string, text: string, contextToken?: string): Promise<string[]> {
+    const messageIds: string[] = [];
     for (const chunk of chunkText(text, TEXT_CHUNK_LIMIT)) {
-      await sendTextMessage({
+      const receipt = await sendTextMessage({
         to,
         text: chunk,
         opts: {
@@ -33,7 +34,9 @@ export class WeixinOutbound {
           contextToken,
         },
       });
+      messageIds.push(receipt.messageId);
     }
+    return messageIds;
   }
 }
 

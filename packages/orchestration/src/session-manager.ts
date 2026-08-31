@@ -10,25 +10,39 @@ export interface SessionRecord {
   updatedAt: number;
 }
 
+interface SessionRow {
+  id: string;
+  user_id: string;
+  agent_id: string;
+  acp_session_id: string | null;
+  owned_by_bridge: number;
+  created_at: number;
+  updated_at: number;
+}
+
+function mapSessionRow(row: SessionRow): SessionRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    agentId: row.agent_id,
+    acpSessionId: row.acp_session_id ?? undefined,
+    ownedByBridge: row.owned_by_bridge === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export class SessionManager {
-  getOrCreate(userId: string, agentId: string): SessionRecord {
-    const id = `${userId}:${agentId}`;
+  getOrCreate(userId: string, agentId: string, requestedId?: string): SessionRecord {
+    const id = requestedId ?? `${userId}:${agentId}`;
     const db = getDb();
-    const row = db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as SessionRecord | undefined;
-    if (row) return row;
+    const row = db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as SessionRow | undefined;
+    if (row) return mapSessionRow(row);
 
-    db.prepare(
-      "INSERT INTO sessions (id, user_id, agent_id, owned_by_bridge) VALUES (?, ?, ?, 1)",
-    ).run(id, userId, agentId);
-
-    return {
-      id,
-      userId,
-      agentId,
-      ownedByBridge: true,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
+    const created = db.prepare(
+      "INSERT INTO sessions (id, user_id, agent_id, owned_by_bridge) VALUES (?, ?, ?, 1) RETURNING *",
+    ).get(id, userId, agentId) as SessionRow;
+    return mapSessionRow(created);
   }
 
   updateAcpSessionId(sessionId: string, acpSessionId: string): void {
@@ -50,6 +64,7 @@ export class SessionManager {
 
   get(sessionId: string): SessionRecord | undefined {
     const db = getDb();
-    return db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRecord | undefined;
+    const row = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
+    return row ? mapSessionRow(row) : undefined;
   }
 }

@@ -1,5 +1,5 @@
-import { describe, it, expect, mock, beforeEach } from "bun:test";
-import { Pipeline, loadPlugins, createLogger } from "@yoyojcoder-weixin-ai/core";
+import { describe, it, expect } from "bun:test";
+import { Pipeline } from "@yoyojcoder-weixin-ai/core";
 import type { PluginRegistry, ParsedMessage, RoutedMessage, PromptContext, AgentResult } from "@yoyojcoder-weixin-ai/core";
 
 /**
@@ -12,7 +12,7 @@ function emptyRegistry(): PluginRegistry {
 }
 
 function makeMsg(text: string): ParsedMessage {
-  return { fromUserId: "test@im.wechat", text, receivedAt: Date.now() };
+  return { channelId: "weixin-main", platform: "weixin", conversationId: "test@im.wechat", senderId: "test@im.wechat", text, receivedAt: Date.now() };
 }
 
 describe("Full pipeline integration", () => {
@@ -23,20 +23,18 @@ describe("Full pipeline integration", () => {
     // Plugin: message-filter at Stage 1
     reg.onReceive.push({
       name: "message-filter",
-      handler: async (msg, next) => {
+      handler: async (msg) => {
         order.push("plugin:filter");
-        msg.text = msg.text.trim();
-        return next();
+        return { ...msg, text: msg.text.trim() };
       },
     });
 
     // Plugin: system-prompt at Stage 3
     reg.beforePrompt.push({
       name: "system-prompt",
-      handler: async (ctx, next) => {
+      handler: async (ctx) => {
         order.push("plugin:system-prompt");
-        (ctx as any)._customPrompt = "You are a helpful assistant.";
-        return next();
+        return { ...ctx, systemPrompt: "You are a helpful assistant." };
       },
     });
 
@@ -49,7 +47,7 @@ describe("Full pipeline integration", () => {
           return {
             message: msg,
             agentId: "opencode",
-            sessionId: `${msg.fromUserId}:opencode`,
+            sessionId: `${msg.senderId}:opencode`,
           } as RoutedMessage;
         },
       },
@@ -64,7 +62,7 @@ describe("Full pipeline integration", () => {
           order.push("stage:context");
           return {
             routed,
-            systemPrompt: (routed as any)._customPrompt ?? "",
+            systemPrompt: "",
             history: [],
             prompt: routed.message.text,
           } as PromptContext;
@@ -95,8 +93,8 @@ describe("Full pipeline integration", () => {
       "plugin:filter",
       "stage:receive",
       "stage:route",
-      "plugin:system-prompt",
       "stage:context",
+      "plugin:system-prompt",
       "stage:execute",
       "stage:send",
     ]);
@@ -109,10 +107,7 @@ describe("Full pipeline integration", () => {
     // Plugin: add footer at Stage 4
     reg.onPrompt.push({
       name: "add-footer",
-      handler: async (result, next) => {
-        result.text += "\n---";
-        return next();
-      },
+      handler: async (result) => ({ ...result, text: result.text + "\n---" }),
     });
 
     let sentText = "";

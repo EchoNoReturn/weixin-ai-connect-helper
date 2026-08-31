@@ -1,9 +1,9 @@
 import "./env.ts";
 import { loadConfig, type BridgeConfig } from "./config.ts";
-import { ensureWeixinLogin, WeixinOutbound, runInboundLoop } from "@yoyojcoder-weixin-ai/transport";
-import { Pipeline, loadPlugins, createLogger } from "@yoyojcoder-weixin-ai/core";
-import { Router, ContextBuilder, SessionManager } from "@yoyojcoder-weixin-ai/orchestration";
+import { Pipeline, loadPlugins, createLogger, type ChannelAdapter, type ChannelConnectionState, type IncomingMessage } from "@yoyojcoder-weixin-ai/core";
+import { Router, ContextBuilder, SessionManager, AccessManager } from "@yoyojcoder-weixin-ai/orchestration";
 import { ProcessManager } from "@yoyojcoder-weixin-ai/agent";
+import { createChannelAdapters } from "./channels.ts";
 
 export interface BridgeHealth {
   status: "starting" | "connected" | "reconnecting" | "stopped";
@@ -12,6 +12,12 @@ export interface BridgeHealth {
   lastError?: string;
   reconnectAttempts: number;
   startedAt: number;
+  channels: Record<string, {
+    platform: string;
+    status: ChannelConnectionState;
+    accountId?: string;
+    lastError?: string;
+  }>;
 }
 
 export interface BridgeOptions {
@@ -31,6 +37,7 @@ export async function startBridge(opts: BridgeOptions = {}) {
     status: "starting",
     reconnectAttempts: 0,
     startedAt: Date.now(),
+    channels: {},
   };
 
   log.info(`配置就绪: defaultAgent=${config.defaultAgent} agents=[${Object.keys(config.agents).join(", ")}]`);
@@ -38,12 +45,12 @@ export async function startBridge(opts: BridgeOptions = {}) {
   const plugins = await loadPlugins(config.pluginsFile);
   log.info(`插件加载完成: ${Object.entries(plugins).map(([k, v]) => `${k}=${v.length}`).join(", ")}`);
 
-  const creds = await ensureWeixinLogin();
-  health.accountId = creds.accountId;
-  log.info(`微信登录成功: ${creds.accountId}`);
-
-  const outbound = new WeixinOutbound(creds);
-  const router = new Router(config);
+  const channels = await createChannelAdapters(config);
+  const channelsById = new Map(channels.map((channel) => [channel.channelId, channel]));
+  health.accountId = channels.find((channel) => channel.platform === "weixin")?.accountId;
+  log.info(`渠道就绪: ${channels.map((channel) => `${channel.channelId}(${channel.platform})`).join(", ")}`);
+  const accessMgr = new AccessManager();
+  const router = new Router(config, accessMgr);
   const ctxBuilder = new ContextBuilder();
   const sessionMgr = new SessionManager();
   const procMgr = new ProcessManager(config.agents, { autoApprove: config.autoApprove });
@@ -62,7 +69,7 @@ export async function startBridge(opts: BridgeOptions = {}) {
       core: async (ctx) => {
         const agent = await procMgr.getAgent(ctx.routed.agentId);
 
-        outbound.noteContextToken(ctx.routed.message.fromUserId, ctx.routed.message.contextToken);
+        sessionMgr.getOrCreate(ctx.routed.message.senderId, ctx.routed.agentId, ctx.routed.sessionId);
         sessionMgr.saveMessage(ctx.routed.sessionId, "user", ctx.prompt);
 
         const startTime = Date.now();
@@ -81,32 +88,20 @@ export async function startBridge(opts: BridgeOptions = {}) {
     send: {
       core: async (result) => {
         if (result.text.trim()) {
-          await outbound.sendText(result.ctx.routed.message.fromUserId, result.text);
+          const incoming = result.ctx.routed.message;
+          const channel = channelsById.get(incoming.channelId);
+          if (!channel) throw new Error(`发送渠道不存在: ${incoming.channelId}`);
+          await channel.send({
+            channelId: incoming.channelId,
+            conversationId: incoming.conversationId,
+            text: result.text,
+            replyToMessageId: incoming.messageId,
+            replyContext: incoming.replyContext,
+          });
         }
       },
     },
   });
-
-  async function runLoop() {
-    health.status = "connected";
-    health.reconnectAttempts = 0;
-    log.info("长轮询开始，等待微信消息...");
-
-    await runInboundLoop({
-      creds,
-      abortSignal: loopAbort.signal,
-      onMessage: async (msg) => {
-        outbound.noteContextToken(msg.fromUserId, msg.contextToken);
-        health.lastMessageAt = Date.now();
-        log.info(`收到 ${msg.fromUserId}: ${msg.text.slice(0, 80)}`);
-        try {
-          await pipeline.run(msg);
-        } catch (err) {
-          log.error(`处理消息失败:`, err);
-        }
-      },
-    });
-  }
 
   const loopAbort = new AbortController();
 
@@ -117,46 +112,80 @@ export async function startBridge(opts: BridgeOptions = {}) {
     abort.addEventListener("abort", () => loopAbort.abort());
   }
 
-  async function reconnect() {
-    if (health.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      health.status = "stopped";
-      health.lastError = `重连次数超限 (${MAX_RECONNECT_ATTEMPTS})`;
-      log.error(health.lastError);
-      return;
-    }
+  const channelStates = new Map<string, ChannelConnectionState>();
+  const updateHealth = (channelId: string, state: ChannelConnectionState, error?: Error) => {
+    channelStates.set(channelId, state);
+    const channel = channelsById.get(channelId);
+    health.channels[channelId] = {
+      platform: channel?.platform ?? "unknown",
+      status: state,
+      accountId: channel?.accountId,
+      lastError: error?.message,
+    };
+    if (error) health.lastError = `[${channelId}] ${error.message}`;
+    const states = [...channelStates.values()];
+    health.status = states.includes("connected")
+      ? "connected"
+      : states.includes("reconnecting")
+        ? "reconnecting"
+        : states.every((value) => value === "stopped")
+          ? "stopped"
+          : "starting";
+  };
 
-    health.status = "reconnecting";
-    health.reconnectAttempts++;
-    log.warn(`连接断开，${RECONNECT_DELAY_MS / 1000}s 后重连 (第 ${health.reconnectAttempts} 次)...`);
-    await Bun.sleep(RECONNECT_DELAY_MS);
-
+  const onMessage = async (msg: IncomingMessage) => {
+    health.lastMessageAt = Date.now();
+    log.info(`收到 [${msg.channelId}] ${msg.senderId}: ${msg.text.slice(0, 80)}`);
     try {
-      await runLoop();
-    } catch {
-      await reconnect();
+      await pipeline.run(msg);
+    } catch (err) {
+      log.error("处理消息失败:", err);
+    }
+  };
+
+  async function runChannel(channel: ChannelAdapter): Promise<void> {
+    let attempts = 0;
+    while (!loopAbort.signal.aborted && attempts <= MAX_RECONNECT_ATTEMPTS) {
+      try {
+        await channel.start({
+          abortSignal: loopAbort.signal,
+          onMessage,
+          onStateChange: (state, error) => updateHealth(channel.channelId, state, error),
+        });
+        if (loopAbort.signal.aborted) return;
+        throw new Error("接收循环意外结束");
+      } catch (error) {
+        attempts++;
+        health.reconnectAttempts++;
+        const err = error instanceof Error ? error : new Error(String(error));
+        updateHealth(channel.channelId, "reconnecting", err);
+        if (attempts > MAX_RECONNECT_ATTEMPTS) {
+          updateHealth(channel.channelId, "stopped", err);
+          log.error(`[${channel.channelId}] 重连次数超限`);
+          return;
+        }
+        log.warn(`[${channel.channelId}] ${RECONNECT_DELAY_MS / 1000}s 后重连 (第 ${attempts} 次)`);
+        await Bun.sleep(RECONNECT_DELAY_MS);
+      }
     }
   }
 
-  // 启动：一直运行直到被 abort
-  const loopPromise = (async () => {
-    try {
-      await runLoop();
-    } catch (err) {
-      health.lastError = String(err);
-      log.error(`长轮询异常: ${health.lastError}`);
-      await reconnect();
-    }
-  })();
+  const loopPromise = Promise.all(channels.map(runChannel)).then(() => undefined);
+  let shuttingDown = false;
 
   return {
     config,
     health,
+    channels,
     procMgr,
     loopPromise,
     async shutdown() {
+      if (shuttingDown) return;
+      shuttingDown = true;
       health.status = "stopped";
       log.info("正在停止...");
       loopAbort.abort();
+      await loopPromise;
       await procMgr.dispose();
     },
   };

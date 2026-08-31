@@ -2,7 +2,7 @@ import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
 
 // Mock the db module
 const mockRun = mock(() => {});
-const mockGet = mock(() => undefined);
+const mockGet = mock((): unknown => undefined);
 const mockAll = mock(() => []);
 
 mock.module("@yoyojcoder-weixin-ai/core", () => ({
@@ -26,6 +26,15 @@ describe("SessionManager", () => {
 
   it("creates new session", () => {
     mockGet.mockReturnValue(undefined);
+    mockGet.mockReturnValueOnce(undefined).mockReturnValueOnce({
+      id: "user@im.wechat:opencode",
+      user_id: "user@im.wechat",
+      agent_id: "opencode",
+      acp_session_id: null,
+      owned_by_bridge: 1,
+      created_at: 1,
+      updated_at: 1,
+    });
     const mgr = new SessionManager();
     const session = mgr.getOrCreate("user@im.wechat", "opencode");
     expect(session.id).toBe("user@im.wechat:opencode");
@@ -35,7 +44,15 @@ describe("SessionManager", () => {
   });
 
   it("returns existing session", () => {
-    mockGet.mockReturnValue({ id: "user@im.wechat:opencode", userId: "user@im.wechat", agentId: "opencode", ownedByBridge: true });
+    mockGet.mockReturnValue({
+      id: "user@im.wechat:opencode",
+      user_id: "user@im.wechat",
+      agent_id: "opencode",
+      acp_session_id: null,
+      owned_by_bridge: 1,
+      created_at: 1,
+      updated_at: 1,
+    });
     const mgr = new SessionManager();
     const session = mgr.getOrCreate("user@im.wechat", "opencode");
     expect(session.id).toBe("user@im.wechat:opencode");

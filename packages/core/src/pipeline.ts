@@ -1,6 +1,6 @@
 import type { PluginRegistry } from "./plugin-system.ts";
-import { runStage } from "./plugin-system.ts";
-import type { ParsedMessage, RoutedMessage, PromptContext, AgentResult } from "./types.ts";
+import { runHooks, runStage } from "./plugin-system.ts";
+import type { ParsedMessage, RoutedMessage, PromptContext, AgentResult, SessionEndContext } from "./types.ts";
 
 export interface PipelineStageHandlers<I, O> {
   core: (data: I) => Promise<O>;
@@ -20,13 +20,24 @@ export class Pipeline {
 
   async run(msg: ParsedMessage): Promise<void> {
     const routed = await runStage("receive", this.registry.onReceive, msg, this.stages.receive.core);
+    if (routed === null) return;
     const ctx = await runStage("route", this.registry.onRoute, routed, this.stages.route.core);
-    const prompt = await runStage("context", this.registry.beforePrompt, ctx, this.stages.context.core);
-    const result = await runStage("execute", this.registry.onPrompt, prompt, this.stages.execute.core);
-    await runStage("send", this.registry.beforeSend, result, this.stages.send.core);
+    if (ctx === null) return;
+
+    const builtPrompt = await this.stages.context.core(ctx);
+    const prompt = await runHooks(this.registry.beforePrompt, builtPrompt);
+    if (prompt === null) return;
+
+    const executedResult = await this.stages.execute.core(prompt);
+    const result = await runHooks(this.registry.onPrompt, executedResult);
+    if (result === null) return;
+
+    const text = await runHooks(this.registry.beforeSend, result.text);
+    if (text === null) return;
+    await this.stages.send.core({ ...result, text });
   }
 
-  async runSessionEndHooks(ctx: Parameters<NonNullable<PluginRegistry["onSessionEnd"][0]["handler"]>>[0]): Promise<void> {
+  async runSessionEndHooks(ctx: SessionEndContext): Promise<void> {
     for (const { handler } of this.registry.onSessionEnd) {
       await handler(ctx);
     }

@@ -9,9 +9,12 @@
       "notifyPolicy": "none"
     }
   },
-  "autoApprove": true,
+  "autoApprove": false,
   "webPort": 3210,
   "pluginsFile": "plugins.json",
   "streamFlushMinChars": 200,
-  "streamFlushIdleMs": 3000
+  "streamFlushIdleMs": 3000,
+  "channels": [
+    { "type": "weixin", "id": "weixin-main", "enabled": true }
+  ]
 }

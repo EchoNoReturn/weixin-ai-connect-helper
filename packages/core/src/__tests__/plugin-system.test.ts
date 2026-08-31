@@ -18,20 +18,18 @@ describe("runStage", () => {
   it("calls core when no hooks", async () => {
     const core = async (msg: ParsedMessage) => ({ ...msg, text: "processed" });
     const result = await runStage("test", [], { text: "hello" } as ParsedMessage, core);
-    expect(result.text).toBe("processed");
+    expect(result?.text).toBe("processed");
   });
 
   it("runs hooks in order before core", async () => {
     const order: string[] = [];
-    const hook1 = async (msg: ParsedMessage, next: () => Promise<void>) => {
+    const hook1 = async (msg: ParsedMessage) => {
       order.push("hook1");
-      msg.text += "+h1";
-      return next();
+      return { ...msg, text: msg.text + "+h1" };
     };
-    const hook2 = async (msg: ParsedMessage, next: () => Promise<void>) => {
+    const hook2 = async (msg: ParsedMessage) => {
       order.push("hook2");
-      msg.text += "+h2";
-      return next();
+      return { ...msg, text: msg.text + "+h2" };
     };
     const core = async (msg: ParsedMessage) => {
       order.push("core");
@@ -42,19 +40,18 @@ describe("runStage", () => {
       { name: "h2", handler: hook2 },
     ], { text: "" } as ParsedMessage, core);
     expect(order).toEqual(["hook1", "hook2", "core"]);
-    expect(result.text).toBe("+h1+h2");
+    expect(result?.text).toBe("+h1+h2");
   });
 
-  it("hook can short-circuit by not calling next", async () => {
-    const hook = async (msg: ParsedMessage, _next: () => Promise<void>) => {
-      msg.text = "intercepted";
-      return msg;
-    };
+  it("hook can short-circuit by returning null", async () => {
+    const hook = async (_msg: ParsedMessage) => null;
+    let coreCalled = false;
     const core = async (msg: ParsedMessage) => {
-      msg.text += "+core";
+      coreCalled = true;
       return msg;
     };
     const result = await runStage("test", [{ name: "h", handler: hook }], { text: "" } as ParsedMessage, core);
-    expect(result.text).toBe("intercepted+core");
+    expect(result).toBeNull();
+    expect(coreCalled).toBe(false);
   });
 });

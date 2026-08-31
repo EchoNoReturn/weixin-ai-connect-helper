@@ -17,7 +17,7 @@ import type { RoutedMessage } from "@yoyojcoder-weixin-ai/core";
 
 function makeRouted(text: string): RoutedMessage {
   return {
-    message: { fromUserId: "user@im.wechat", text, receivedAt: Date.now() },
+    message: { channelId: "weixin-main", platform: "weixin", conversationId: "user@im.wechat", senderId: "user@im.wechat", text, receivedAt: Date.now() },
     agentId: "opencode",
     sessionId: "user@im.wechat:opencode",
   };

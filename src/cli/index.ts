@@ -71,6 +71,14 @@ program
     await execStatus();
   });
 
+program
+  .command("channels")
+  .description("列出已配置的消息渠道")
+  .action(async () => {
+    const { execChannelsList } = await import("./commands/channels.ts");
+    await execChannelsList();
+  });
+
 // ── plugins (alias: p) ──
 const plugins = program
   .command("plugins")
@@ -99,6 +107,35 @@ plugins
   .action(async (name: string) => {
     const { execPlugins } = await import("./commands/plugins.ts");
     await execPlugins(["disable", name]);
+  });
+
+// ── access ──
+const access = program
+  .command("access")
+  .description("管理渠道用户访问授权");
+
+access
+  .command("list [status]")
+  .description("列出访问记录，可按 pending/approved/revoked 过滤")
+  .action(async (status?: string) => {
+    const { execAccess } = await import("./commands/access.ts");
+    await execAccess(["list", ...(status ? [status] : [])]);
+  });
+
+access
+  .command("approve <user-id>")
+  .description("批准待审批用户")
+  .action(async (userId: string) => {
+    const { execAccess } = await import("./commands/access.ts");
+    await execAccess(["approve", userId]);
+  });
+
+access
+  .command("revoke <user-id>")
+  .description("撤销用户访问权限")
+  .action(async (userId: string) => {
+    const { execAccess } = await import("./commands/access.ts");
+    await execAccess(["revoke", userId]);
   });
 
 program.parse();

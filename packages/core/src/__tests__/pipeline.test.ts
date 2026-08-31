@@ -15,7 +15,7 @@ function emptyRegistry(): PluginRegistry {
 }
 
 function makeMsg(text: string): ParsedMessage {
-  return { fromUserId: "test@im.wechat", text, receivedAt: Date.now() };
+  return { channelId: "weixin-main", platform: "weixin", conversationId: "test@im.wechat", senderId: "test@im.wechat", text, receivedAt: Date.now() };
 }
 
 describe("Pipeline", () => {
@@ -37,11 +37,11 @@ describe("Pipeline", () => {
     const reg = emptyRegistry();
     reg.onReceive.push({
       name: "add-prefix",
-      handler: async (msg, next) => { msg.text = "[filtered]" + msg.text; return next(); },
+      handler: async (msg) => ({ ...msg, text: "[filtered]" + msg.text }),
     });
     reg.beforePrompt.push({
       name: "set-prompt",
-      handler: async (ctx, next) => { (ctx as any)._customPrompt = "system"; return next(); },
+      handler: async (ctx) => ({ ...ctx, systemPrompt: "system" }),
     });
 
     let capturedPrefix = "";
@@ -49,7 +49,7 @@ describe("Pipeline", () => {
     const pipeline = new Pipeline(reg, {
       receive: { core: async (msg) => { capturedPrefix = msg.text.slice(0, 10); return { message: msg, agentId: "opencode", sessionId: "s1" }; } },
       route: { core: async (r) => r },
-      context: { core: async (r) => ({ routed: r, systemPrompt: (r as any)._customPrompt ?? "", history: [], prompt: r.message.text }) },
+      context: { core: async (r) => ({ routed: r, systemPrompt: "", history: [], prompt: r.message.text }) },
       execute: { core: async (c) => { capturedPrompt = c.systemPrompt; return { ctx: c, text: "", stopReason: "completed", durationMs: 0 }; } },
       send: { core: async () => {} },
     });

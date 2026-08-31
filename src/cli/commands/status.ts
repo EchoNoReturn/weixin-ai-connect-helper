@@ -19,6 +19,11 @@ export async function execStatus(): Promise<void> {
       };
       console.log(`连接状态:    ${statusMap[health.status] ?? health.status}`);
       console.log(`微信账号:    ${health.accountId ?? "未知"}`);
+      if (health.channels) {
+        for (const [id, channel] of Object.entries(health.channels)) {
+          console.log(`渠道 ${id}: ${statusMap[channel.status] ?? channel.status} (${channel.platform})`);
+        }
+      }
 
       if (health.lastMessageAt) {
         const ago = Math.round((Date.now() - health.lastMessageAt) / 1000);
