@@ -6,7 +6,8 @@ set -e
 
 REPO="EchoNoReturn/weixin-ai-connect-helper"
 BINARY_NAME="wah"
-INSTALL_DIR="${INSTALL_DIR:-$HOME/.wah}"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
+STATE_DIR="${BRIDGE_STATE_DIR:-$HOME/.wah}"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -82,24 +83,35 @@ install() {
     
     # 创建临时目录
     tmp_dir=$(mktemp -d)
-    trap "rm -rf $tmp_dir" EXIT
+    trap "rm -rf -- '$tmp_dir'" EXIT
     
     # 下载
     info "正在下载..."
-    curl -L -o "${tmp_dir}/${archive_name}" "$url"
+    curl --fail --show-error --location -o "${tmp_dir}/${archive_name}" "$url"
     
     # 解压
     info "正在解压..."
     tar -xzf "${tmp_dir}/${archive_name}" -C "${tmp_dir}"
     
-    # 创建安装目录
+    # 创建程序与状态目录
     mkdir -p "${INSTALL_DIR}"
+    mkdir -p "${STATE_DIR}"
     
     # 安装文件
     info "正在安装到 ${INSTALL_DIR}..."
     cp "${tmp_dir}/wah" "${INSTALL_DIR}/${BINARY_NAME}"
     cp "${tmp_dir}/pgh" "${INSTALL_DIR}/pgh"
-    cp "${tmp_dir}/plugins.json" "${INSTALL_DIR}/"
+    if [ ! -f "${STATE_DIR}/plugins.json" ]; then
+        cp "${tmp_dir}/plugins.json" "${STATE_DIR}/plugins.json"
+    fi
+    if [ -f "${tmp_dir}/bridge.config.json" ] && [ ! -f "${STATE_DIR}/bridge.config.json" ]; then
+        cp "${tmp_dir}/bridge.config.json" "${STATE_DIR}/bridge.config.json"
+    fi
+
+    # 迁移旧版默认布局：仅删除旧的程序文件，保留 ~/.wah 下的用户状态。
+    if [ "${INSTALL_DIR}" != "$HOME/.wah" ]; then
+        rm -f "$HOME/.wah/wah" "$HOME/.wah/pgh"
+    fi
     
     # 设置执行权限
     chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
@@ -108,7 +120,7 @@ install() {
     # 自动配置 PATH
     if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
         local shell_config=""
-        local export_line="export PATH=\"\$HOME/.wah:\$PATH\""
+        local export_line="export PATH=\"${INSTALL_DIR}:\$PATH\""
         
         # 检测 shell 配置文件
         if [ -n "$ZSH_VERSION" ] || [ -f "$HOME/.zshrc" ]; then
@@ -123,14 +135,14 @@ install() {
         
         if [ -n "$shell_config" ]; then
             # 检查是否已经配置过
-            if ! grep -q '$HOME/.wah' "$shell_config" 2>/dev/null; then
+            if ! grep -Fq "$INSTALL_DIR" "$shell_config" 2>/dev/null; then
                 echo "" >> "$shell_config"
                 echo "# WeChat AI Connect Helper" >> "$shell_config"
                 echo "$export_line" >> "$shell_config"
                 info "已自动添加 PATH 到 ${shell_config}"
             fi
             # 立即生效
-            export PATH="$HOME/.wah:$PATH"
+            export PATH="$INSTALL_DIR:$PATH"
         else
             warn "未找到 shell 配置文件，请手动添加 PATH:"
             echo "  $export_line"
@@ -141,6 +153,7 @@ install() {
     echo ""
     echo "  版本: ${version}"
     echo "  位置: ${INSTALL_DIR}/${BINARY_NAME}"
+    echo "  状态: ${STATE_DIR}"
     echo ""
     echo "  使用方法:"
     echo "    ${BINARY_NAME} start    # 启动服务"
@@ -158,10 +171,12 @@ uninstall() {
     
     rm -f "${install_dir}/${BINARY_NAME}"
     rm -f "${install_dir}/pgh"
-    rm -f "${install_dir}/package.json"
-    rm -f "${install_dir}/plugins.json"
+    if [ "${install_dir}" != "$HOME/.wah" ]; then
+        rm -f "$HOME/.wah/wah" "$HOME/.wah/pgh"
+    fi
+    rmdir "${install_dir}" 2>/dev/null || true
     
-    info "卸载完成"
+    info "卸载完成；状态数据保留在 ${STATE_DIR}"
 }
 
 # 主函数
@@ -181,7 +196,8 @@ main() {
             echo "  -h, help     显示帮助"
             echo ""
             echo "环境变量:"
-            echo "  INSTALL_DIR  安装目录 (默认: ~/.wah)"
+            echo "  INSTALL_DIR      程序目录 (默认: ~/.local/bin)"
+            echo "  BRIDGE_STATE_DIR 状态目录 (默认: ~/.wah)"
             ;;
         *)
             check_deps

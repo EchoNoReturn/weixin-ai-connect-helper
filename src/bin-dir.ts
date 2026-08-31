@@ -1,6 +1,7 @@
 import path from "path";
 import { existsSync } from "fs";
 import { isDevMode } from "./cli/runtime.ts";
+import { STATE_DIR } from "./env.ts";
 
 /**
  * 获取当前可执行文件所在目录
@@ -29,14 +30,20 @@ export function getBinDir(): string {
  * 获取配置文件路径（相对于二进制目录）
  */
 export function getConfigPath(filename: string): string {
-  const binDir = getBinDir();
-  const configPath = path.join(binDir, filename);
-  
-  // 如果二进制目录下没有配置文件，尝试当前工作目录
-  if (existsSync(configPath)) {
-    return configPath;
+  const cwdPath = path.resolve(filename);
+  const statePath = path.join(STATE_DIR, filename);
+
+  // 源码开发优先使用仓库当前目录，避免读取已安装版本的配置。
+  if (isDevMode()) {
+    if (existsSync(cwdPath)) return cwdPath;
+    if (existsSync(statePath)) return statePath;
+    return cwdPath;
   }
-  
-  // 回退到当前工作目录
-  return filename;
+
+  // 安装版配置与运行状态放在 STATE_DIR；手动解压运行时兼容二进制同目录。
+  const binPath = path.join(getBinDir(), filename);
+  if (existsSync(statePath)) return statePath;
+  if (existsSync(binPath)) return binPath;
+  if (existsSync(cwdPath)) return cwdPath;
+  return statePath;
 }

@@ -16,7 +16,9 @@ if ($PSVersionTable.PSVersion.Major -lt 6) {
 # 配置
 $Repo = "EchoNoReturn/weixin-ai-connect-helper"
 $BinaryName = "wah"
-$InstallDir = Join-Path $env:USERPROFILE ".wah"
+$InstallDir = Join-Path $env:LOCALAPPDATA "Programs\wah"
+$StateDir = Join-Path $env:USERPROFILE ".wah"
+$LegacyInstallDir = $StateDir
 $LegacyStateDir = Join-Path $env:USERPROFILE ".weixin-ai-connect-helper"
 
 # 输出函数（注意：不要遮蔽内置的 Write-Error cmdlet）
@@ -50,10 +52,15 @@ function Get-LatestVersion {
 
 # 停止运行中的服务（wah stop 自身能容忍"未运行"状态）
 function Stop-WahService {
-    $wahExe = Join-Path $InstallDir "$BinaryName.exe"
-    if (Test-Path $wahExe) {
-        & $wahExe stop 2>$null | Out-Null
-        Start-Sleep -Seconds 1
+    foreach ($wahExe in @(
+        (Join-Path $InstallDir "$BinaryName.exe"),
+        (Join-Path $LegacyInstallDir "$BinaryName.exe")
+    )) {
+        if (Test-Path $wahExe) {
+            & $wahExe stop 2>$null | Out-Null
+            Start-Sleep -Seconds 1
+            return
+        }
     }
 }
 
@@ -61,12 +68,16 @@ function Stop-WahService {
 function Remove-FromPath {
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     if ($userPath) {
-        $newPath = ($userPath -split ";" | Where-Object { $_ -and ($_.TrimEnd('\') -ne $InstallDir) }) -join ";"
+        $newPath = ($userPath -split ";" | Where-Object {
+            $_ -and ($_.TrimEnd('\') -ne $InstallDir) -and ($_.TrimEnd('\') -ne $LegacyInstallDir)
+        }) -join ";"
         if ($newPath -ne $userPath) {
             [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
         }
     }
-    $env:Path = ($env:Path -split ";" | Where-Object { $_ -and ($_.TrimEnd('\') -ne $InstallDir) }) -join ";"
+    $env:Path = ($env:Path -split ";" | Where-Object {
+        $_ -and ($_.TrimEnd('\') -ne $InstallDir) -and ($_.TrimEnd('\') -ne $LegacyInstallDir)
+    }) -join ";"
 }
 
 # 安装
@@ -100,8 +111,9 @@ function Install-Wah {
         # 若旧版本正在运行，先停止，避免文件占用
         Stop-WahService
 
-        # 创建安装目录
+        # 程序目录和状态目录分离，升级/卸载不会触碰登录凭证与数据库。
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+        New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
 
         # 安装可执行文件
         Write-Info "正在安装到 $InstallDir..."
@@ -111,10 +123,16 @@ function Install-Wah {
         # 配置文件仅在目标不存在时复制，避免重装覆盖用户修改
         foreach ($f in @("plugins.json", "bridge.config.json")) {
             $src = Join-Path $tmpDir $f
-            $dst = Join-Path $InstallDir $f
+            $dst = Join-Path $StateDir $f
             if ((Test-Path $src) -and (-not (Test-Path $dst))) {
                 Copy-Item $src $dst
             }
+        }
+
+        # 旧版把程序与状态都放在 ~/.wah；仅移除旧程序文件，保留状态数据。
+        if ($LegacyInstallDir -ne $InstallDir) {
+            Remove-Item -Force -Path (Join-Path $LegacyInstallDir "wah.exe") -ErrorAction SilentlyContinue
+            Remove-Item -Force -Path (Join-Path $LegacyInstallDir "pgh.exe") -ErrorAction SilentlyContinue
         }
     } finally {
         # 清理（Remove-Item 没有 -ItemType 参数；删除非空目录需要 -Recurse）
@@ -134,6 +152,7 @@ function Install-Wah {
     Write-Host ""
     Write-Host "  版本: $version"
     Write-Host "  位置: $InstallDir"
+    Write-Host "  状态: $StateDir"
     Write-Host ""
     Write-Host "  使用方法:"
     Write-Host "    $BinaryName start    # 启动服务"
@@ -150,21 +169,30 @@ function Uninstall-Wah {
     # 先停止服务，避免文件占用导致删除失败
     Stop-WahService
 
-    # 删除安装目录（包含状态数据：登录凭证、bridge.db、日志）
+    # 只删除明确安装的程序文件，状态数据默认保留。
     if (Test-Path $InstallDir) {
-        Remove-Item -Recurse -Force -Path $InstallDir
-        Write-Info "已删除安装目录: $InstallDir"
+        Remove-Item -Force -Path (Join-Path $InstallDir "$BinaryName.exe") -ErrorAction SilentlyContinue
+        Remove-Item -Force -Path (Join-Path $InstallDir "pgh.exe") -ErrorAction SilentlyContinue
+        Remove-Item -Force -Path (Join-Path $InstallDir "plugins.json") -ErrorAction SilentlyContinue
+        Remove-Item -Force -Path (Join-Path $InstallDir "bridge.config.json") -ErrorAction SilentlyContinue
+        Remove-Item -Force -Path $InstallDir -ErrorAction SilentlyContinue
+        Write-Info "已删除程序文件: $InstallDir"
+    }
+    if ($LegacyInstallDir -ne $InstallDir) {
+        Remove-Item -Force -Path (Join-Path $LegacyInstallDir "wah.exe") -ErrorAction SilentlyContinue
+        Remove-Item -Force -Path (Join-Path $LegacyInstallDir "pgh.exe") -ErrorAction SilentlyContinue
     }
 
-    # 清理旧版本遗留的状态目录
+    if (Test-Path $StateDir) {
+        Write-Info "已保留状态数据: $StateDir"
+    }
     if (Test-Path $LegacyStateDir) {
-        Remove-Item -Recurse -Force -Path $LegacyStateDir
-        Write-Info "已删除旧版状态目录: $LegacyStateDir"
+        Write-Info "已保留旧版状态数据: $LegacyStateDir"
     }
 
     Remove-FromPath
 
-    Write-Info "卸载完成（登录凭证与配置已一并删除）"
+    Write-Info "卸载完成（登录凭证、配置、数据库和日志未删除）"
 }
 
 # 主函数（参数来自脚本顶部 param()，函数内通过动态作用域读取）

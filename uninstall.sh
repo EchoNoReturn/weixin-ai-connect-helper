@@ -4,8 +4,8 @@ set -e
 # WeChat AI Connect Helper - 卸载脚本
 # 支持 macOS 和 Linux
 
-INSTALL_DIR="${INSTALL_DIR:-$HOME/.wah}"
-STATE_DIR="${BRIDGE_STATE_DIR:-$HOME/.weixin-ai-connect-helper}"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
+STATE_DIR="${BRIDGE_STATE_DIR:-$HOME/.wah}"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -20,8 +20,10 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 # 停止服务
 stop_service() {
     local wah_bin="${INSTALL_DIR}/wah"
-    
-    # 检查 wah 是否存在
+    if [ ! -f "$wah_bin" ] && [ -f "$HOME/.wah/wah" ]; then
+        wah_bin="$HOME/.wah/wah"
+    fi
+
     if [ ! -f "$wah_bin" ]; then
         return
     fi
@@ -52,29 +54,31 @@ uninstall() {
     # 先停止服务
     stop_service
     
-    # 删除安装目录
-    if [ -d "${INSTALL_DIR}" ]; then
-        rm -rf "${INSTALL_DIR}"
-        info "已删除安装目录: ${INSTALL_DIR}"
-    else
-        warn "安装目录不存在: ${INSTALL_DIR}"
+    # 只删除本项目明确安装的文件。INSTALL_DIR 可能是 /usr/local/bin 等共享目录，
+    # 绝不能递归删除整个目录。登录凭证、配置、数据库和日志默认保留。
+    rm -f \
+        "${INSTALL_DIR}/wah" \
+        "${INSTALL_DIR}/pgh"
+    if [ "${INSTALL_DIR}" != "$HOME/.wah" ]; then
+        rm -f "$HOME/.wah/wah" "$HOME/.wah/pgh"
     fi
-    
-    # 删除状态目录
+    rmdir "${INSTALL_DIR}" 2>/dev/null || true
+    info "已删除程序文件: ${INSTALL_DIR}"
     if [ -d "${STATE_DIR}" ]; then
-        rm -rf "${STATE_DIR}"
-        info "已删除状态目录: ${STATE_DIR}"
+        info "已保留状态数据: ${STATE_DIR}"
     fi
     
     # 从 shell 配置文件中移除 PATH
     local removed_from=""
     for shell_config in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
-        if [ -f "$shell_config" ] && grep -q '$HOME/.wah' "$shell_config" 2>/dev/null; then
-            # 使用 sed 移除相关行
-            sed -i.bak '/# WeChat AI Connect Helper/d' "$shell_config"
-            sed -i.bak '/\$HOME\/\.wah/d' "$shell_config"
-            # 删除备份文件
-            rm -f "${shell_config}.bak"
+        if [ -f "$shell_config" ] && { grep -Fq "$INSTALL_DIR" "$shell_config" 2>/dev/null || grep -Fq '$HOME/.wah' "$shell_config" 2>/dev/null; }; then
+            local path_line="export PATH=\"${INSTALL_DIR}:\$PATH\""
+            local legacy_line='export PATH="$HOME/.wah:$PATH"'
+            local temp_config="${shell_config}.wah-uninstall.tmp"
+            awk -v path_line="$path_line" -v legacy_line="$legacy_line" '
+                $0 != "# WeChat AI Connect Helper" && $0 != path_line && $0 != legacy_line { print }
+            ' "$shell_config" > "$temp_config"
+            mv "$temp_config" "$shell_config"
             removed_from="$shell_config"
         fi
     done
@@ -83,7 +87,7 @@ uninstall() {
         info "已从 ${removed_from} 移除 PATH 配置"
     fi
     
-    info "卸载完成！"
+    info "卸载完成！登录凭证、配置、数据库和日志未删除"
     echo ""
     echo "  注意: 可能需要重启终端才能使更改生效"
     echo ""
@@ -102,7 +106,8 @@ main() {
             echo "  -h, help     显示帮助"
             echo ""
             echo "环境变量:"
-            echo "  INSTALL_DIR  安装目录 (默认: ~/.wah)"
+            echo "  INSTALL_DIR      程序目录 (默认: ~/.local/bin)"
+            echo "  BRIDGE_STATE_DIR 状态目录 (默认: ~/.wah)"
             echo ""
             echo "快速卸载:"
             echo "  curl -fsSL https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main/uninstall.sh | bash"
