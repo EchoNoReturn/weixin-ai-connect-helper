@@ -1,30 +1,37 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, it, expect, afterAll } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
-// Mock the db module before importing context-builder
-mock.module("@yoyojcoder-weixin-ai/core", () => ({
-  getDb: () => ({
-    prepare: () => ({
-      all: () => [
-        { role: "user", content: "hello" },
-        { role: "assistant", content: "hi there" },
-      ],
-    }),
-  }),
-}));
+const tmpState = mkdtempSync(path.join(tmpdir(), "wah-cb-"));
+process.env.BRIDGE_STATE_DIR = tmpState;
 
-import { ContextBuilder } from "../context-builder.ts";
+const { ContextBuilder } = await import("../context-builder.ts");
+const { SessionManager } = await import("../session-manager.ts");
+const { closeDb } = await import("@yoyojcoder-weixin-ai/core");
 import type { RoutedMessage } from "@yoyojcoder-weixin-ai/core";
 
-function makeRouted(text: string): RoutedMessage {
+afterAll(async () => {
+  closeDb();
+  await Bun.sleep(100);
+  try { rmSync(tmpState, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch {}
+});
+
+function makeRouted(text: string, userId = "user@im.wechat"): RoutedMessage {
   return {
-    message: { fromUserId: "user@im.wechat", text, receivedAt: Date.now() },
+    message: { fromUserId: userId, text, receivedAt: Date.now() },
     agentId: "opencode",
-    sessionId: "user@im.wechat:opencode",
+    sessionId: `${userId}:opencode`,
   };
 }
 
 describe("ContextBuilder", () => {
   it("builds prompt context with history", async () => {
+    const mgr = new SessionManager();
+    mgr.getOrCreate("user@im.wechat", "opencode");
+    mgr.saveMessage("user@im.wechat:opencode", "user", "hello");
+    mgr.saveMessage("user@im.wechat:opencode", "assistant", "hi there");
+
     const builder = new ContextBuilder();
     const ctx = await builder.build(makeRouted("what's next?"));
     expect(ctx.prompt).toBe("what's next?");
@@ -32,5 +39,12 @@ describe("ContextBuilder", () => {
     expect(ctx.history).toHaveLength(2);
     expect(ctx.history[0]).toEqual({ role: "user", content: "hello" });
     expect(ctx.history[1]).toEqual({ role: "assistant", content: "hi there" });
+  });
+
+  it("returns empty history for new session", async () => {
+    const builder = new ContextBuilder();
+    const ctx = await builder.build(makeRouted("hi", "fresh@im.wechat"));
+    expect(ctx.history).toEqual([]);
+    expect(ctx.systemPrompt).toBe("");
   });
 });
