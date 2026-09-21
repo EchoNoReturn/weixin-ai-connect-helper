@@ -183,8 +183,8 @@ interface BridgePlugin {
   onPrompt?: (result: AgentResult, next: () => Promise<void>) => Promise<AgentResult>;
   onSessionEnd?: (ctx: SessionEndContext) => Promise<void>;
 
-  // Stage 5: 发送
-  beforeSend?: (text: string, next: () => Promise<void>) => Promise<string>;
+  // Stage 5: 发送（注意：正文已在 Stage 4 流式发出，改 result.text 不会重发）
+  beforeSend?: (result: AgentResult, next: () => Promise<void>) => Promise<AgentResult>;
 
   // 生命周期事件（非消息流）
   onAgentReady?: (agentId: string) => Promise<void>;

@@ -30,6 +30,8 @@ export interface SessionEndContext {
   agentId: string;
   sessionId: string;
   ownedByBridge: boolean;
+  /** 通知策略（来自 agent 配置）：none=不通知 own=仅本桥接创建的会话 all=所有会话 */
+  notifyPolicy: "none" | "own" | "all";
   lastMessage?: string;
   durationMs: number;
   stopReason: string;

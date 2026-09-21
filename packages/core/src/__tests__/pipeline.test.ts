@@ -10,6 +10,8 @@ function emptyRegistry(): PluginRegistry {
     beforePrompt: [],
     onPrompt: [],
     onSessionEnd: [],
+    onAgentReady: [],
+    onAgentExit: [],
     beforeSend: [],
   };
 }
@@ -37,11 +39,11 @@ describe("Pipeline", () => {
     const reg = emptyRegistry();
     reg.onReceive.push({
       name: "add-prefix",
-      handler: async (msg, next) => { msg.text = "[filtered]" + msg.text; return next(); },
+      handler: async (msg: ParsedMessage, next: () => Promise<void>) => { msg.text = "[filtered]" + msg.text; return next(); },
     });
     reg.beforePrompt.push({
       name: "set-prompt",
-      handler: async (ctx, next) => { (ctx as any)._customPrompt = "system"; return next(); },
+      handler: async (ctx: PromptContext, next: () => Promise<void>) => { ctx.systemPrompt = "system"; return next(); },
     });
 
     let capturedPrefix = "";
@@ -49,7 +51,7 @@ describe("Pipeline", () => {
     const pipeline = new Pipeline(reg, {
       receive: { core: async (msg) => { capturedPrefix = msg.text.slice(0, 10); return { message: msg, agentId: "opencode", sessionId: "s1" }; } },
       route: { core: async (r) => r },
-      context: { core: async (r) => ({ routed: r, systemPrompt: (r as any)._customPrompt ?? "", history: [], prompt: r.message.text }) },
+      context: { core: async (r) => ({ routed: r, systemPrompt: "", history: [], prompt: r.message.text }) },
       execute: { core: async (c) => { capturedPrompt = c.systemPrompt; return { ctx: c, text: "", stopReason: "completed", durationMs: 0 }; } },
       send: { core: async () => {} },
     });
@@ -63,11 +65,11 @@ describe("Pipeline", () => {
     const reg = emptyRegistry();
     reg.onSessionEnd.push({
       name: "tracker",
-      handler: async (ctx) => { called.push(ctx.agentId); },
+      handler: async (ctx: any) => { called.push(ctx.agentId); },
     });
     reg.onSessionEnd.push({
       name: "tracker2",
-      handler: async (ctx) => { called.push(ctx.agentId + "!"); },
+      handler: async (ctx: any) => { called.push(ctx.agentId + "!"); },
     });
 
     const pipeline = new Pipeline(reg, {
@@ -82,6 +84,7 @@ describe("Pipeline", () => {
       agentId: "opencode",
       sessionId: "s1",
       ownedByBridge: true,
+      notifyPolicy: "none" as const,
       durationMs: 1000,
       stopReason: "completed",
       notify: async () => {},

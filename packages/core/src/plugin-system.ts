@@ -17,7 +17,12 @@ export interface BridgePlugin {
   beforePrompt?: (ctx: PromptContext, next: () => Promise<void>) => Promise<PromptContext>;
   onPrompt?: (result: AgentResult, next: () => Promise<void>) => Promise<AgentResult>;
   onSessionEnd?: (ctx: SessionEndContext) => Promise<void>;
-  beforeSend?: (text: string, next: () => Promise<void>) => Promise<string>;
+  /**
+   * Stage 5 发送前 hook，接收 AgentResult。
+   * 注意：回复正文已在 Stage 4 流式发到微信，修改 result.text 不会重发；
+   * 该 hook 适合做发送前观察/记录，或阻止 Stage 5 的兜底发送（抛错）。
+   */
+  beforeSend?: (result: AgentResult, next: () => Promise<void>) => Promise<AgentResult>;
   onAgentReady?: (agentId: string) => Promise<void>;
   onAgentExit?: (agentId: string, code: number | null) => Promise<void>;
 }
@@ -34,6 +39,8 @@ export interface PluginRegistry {
   onPrompt: PluginEntry[];
   onSessionEnd: PluginEntry[];
   beforeSend: PluginEntry[];
+  onAgentReady: PluginEntry[];
+  onAgentExit: PluginEntry[];
 }
 
 function emptyRegistry(): PluginRegistry {
@@ -44,6 +51,8 @@ function emptyRegistry(): PluginRegistry {
     onPrompt: [],
     onSessionEnd: [],
     beforeSend: [],
+    onAgentReady: [],
+    onAgentExit: [],
   };
 }
 
@@ -113,9 +122,9 @@ export async function runStage<I>(
 ): Promise<any> {
   let idx = 0;
   const next = async (): Promise<void> => {
-    if (idx < hooks.length) {
-      const { handler } = hooks[idx++];
-      await handler(initial, next);
+    const entry = hooks[idx++];
+    if (entry) {
+      await entry.handler(initial, next);
       await next();
     }
   };
