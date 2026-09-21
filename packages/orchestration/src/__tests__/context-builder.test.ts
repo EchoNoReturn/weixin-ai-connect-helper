@@ -1,19 +1,22 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, it, expect, afterAll } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
-// Mock the db module before importing context-builder
-mock.module("@yoyojcoder-weixin-ai/core", () => ({
-  getDb: () => ({
-    prepare: () => ({
-      all: () => [
-        { role: "user", content: "hello" },
-        { role: "assistant", content: "hi there" },
-      ],
-    }),
-  }),
-}));
+// 真实 SQLite（临时目录），避免 mock.module 泄漏污染其他测试文件
+const tmpState = mkdtempSync(path.join(tmpdir(), "wah-cb-"));
+process.env.BRIDGE_STATE_DIR = tmpState;
 
-import { ContextBuilder } from "../context-builder.ts";
+const { ContextBuilder } = await import("../context-builder.ts");
+const { SessionManager } = await import("../session-manager.ts");
+const { closeDb } = await import("@yoyojcoder-weixin-ai/core");
 import type { RoutedMessage } from "@yoyojcoder-weixin-ai/core";
+
+afterAll(async () => {
+  closeDb();
+  await Bun.sleep(100);
+  try { rmSync(tmpState, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch {}
+});
 
 function makeRouted(text: string): RoutedMessage {
   return {
@@ -25,6 +28,11 @@ function makeRouted(text: string): RoutedMessage {
 
 describe("ContextBuilder", () => {
   it("builds prompt context with history", async () => {
+    const mgr = new SessionManager();
+    mgr.getOrCreate("user@im.wechat", "opencode");
+    mgr.saveMessage("user@im.wechat:opencode", "user", "hello");
+    mgr.saveMessage("user@im.wechat:opencode", "assistant", "hi there");
+
     const builder = new ContextBuilder();
     const ctx = await builder.build(makeRouted("what's next?"));
     expect(ctx.prompt).toBe("what's next?");

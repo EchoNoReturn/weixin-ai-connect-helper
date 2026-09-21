@@ -6,6 +6,7 @@ import { SessionManager } from "./session-manager.ts";
 export { Router } from "./router.ts";
 export { ContextBuilder } from "./context-builder.ts";
 export { SessionManager } from "./session-manager.ts";
+export { composePrompt } from "./prompt-composer.ts";
 export { AccessManager, type AccessRecord, type AccessStatus, type AccessStore } from "./access-manager.ts";
 
 export function createStageHandlers(router: Router, ctxBuilder: ContextBuilder) {
