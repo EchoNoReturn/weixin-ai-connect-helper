@@ -10,6 +10,18 @@ export interface PromptResult {
 
 export type ChunkHandler = (fullText: string) => void;
 
+export interface AgentLifecycle {
+  /** ACP initialize 完成，agent 就绪 */
+  onReady?: (agentId: string) => void;
+  /** agent 子进程退出 */
+  onExit?: (agentId: string, code: number | null) => void;
+}
+
+export interface AcpAgentOptions {
+  autoApprove: boolean;
+  lifecycle?: AgentLifecycle;
+}
+
 export class AcpAgent {
   private sessions = new Map<string, acp.ActiveSession>();
   private queues = new Map<string, Promise<unknown>>();
@@ -24,7 +36,7 @@ export class AcpAgent {
   static async start(
     id: string,
     cfg: AgentConfig,
-    opts: { autoApprove: boolean },
+    opts: AcpAgentOptions,
   ): Promise<AcpAgent> {
     const proc = spawn(cfg.command, cfg.args, {
       stdio: ["pipe", "pipe", "inherit"],
@@ -33,9 +45,10 @@ export class AcpAgent {
       windowsHide: true,
     });
     proc.on("error", (err) => console.error(`[acp:${id}] 进程错误:`, err));
-    proc.on("exit", (code) =>
-      console.error(`[acp:${id}] 进程退出 code=${code}`),
-    );
+    proc.on("exit", (code) => {
+      console.error(`[acp:${id}] 进程退出 code=${code}`);
+      opts.lifecycle?.onExit?.(id, code);
+    });
 
     const stream = acp.ndJsonStream(
       Writable.toWeb(proc.stdin!) as WritableStream<Uint8Array>,
@@ -68,6 +81,7 @@ export class AcpAgent {
       clientInfo: { name: "weixin-ai-connect-helper", version: "0.1.0" },
     });
     console.log(`[acp:${id}] agent 已连接 (protocol v${init.protocolVersion})`);
+    opts.lifecycle?.onReady?.(id);
 
     return new AcpAgent(id, cfg, proc, conn);
   }
@@ -115,6 +129,11 @@ export class AcpAgent {
     }
     await promptPromise;
     return { text: full, stopReason };
+  }
+
+  /** 该 userKey 是否已有（本进程内的）ACP session；用于决定是否注入 systemPrompt */
+  hasSession(userKey: string): boolean {
+    return this.sessions.has(userKey);
   }
 
   private async getSession(userKey: string): Promise<acp.ActiveSession> {
