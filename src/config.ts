@@ -21,6 +21,13 @@ const DEFAULTS: BridgeConfig = {
   streamFlushIdleMs: 3000,
 };
 
+/** 持久化配置到 bridge.config.json */
+export async function saveConfig(config: BridgeConfig): Promise<BridgeConfig> {
+  const configPath = getConfigPath("bridge.config.json");
+  await Bun.write(configPath, JSON.stringify(config, null, 2) + "\n");
+  return config;
+}
+
 export async function loadConfig(): Promise<BridgeConfig> {
   const configPath = getConfigPath("bridge.config.json");
   const file = Bun.file(configPath);

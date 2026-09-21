@@ -4,6 +4,7 @@ import { ensureWeixinLogin, WeixinOutbound, runInboundLoop } from "@yoyojcoder-w
 import { Pipeline, loadPlugins, createLogger } from "@yoyojcoder-weixin-ai/core";
 import { Router, ContextBuilder, SessionManager } from "@yoyojcoder-weixin-ai/orchestration";
 import { ProcessManager } from "@yoyojcoder-weixin-ai/agent";
+import { runAgentTurn } from "./agent-turn.ts";
 
 export interface BridgeHealth {
   status: "starting" | "connected" | "reconnecting" | "stopped";
@@ -46,9 +47,15 @@ export async function startBridge(opts: BridgeOptions = {}) {
   const router = new Router(config);
   const ctxBuilder = new ContextBuilder();
   const sessionMgr = new SessionManager();
-  const procMgr = new ProcessManager(config.agents, { autoApprove: config.autoApprove });
+  const procMgr = new ProcessManager(config.agents, {
+    autoApprove: config.autoApprove,
+    lifecycle: {
+      onReady: (agentId) => { void pipeline.runAgentReadyHooks(agentId).catch((err: unknown) => log.error("onAgentReady hook 失败:", err)); },
+      onExit: (agentId, code) => { void pipeline.runAgentExitHooks(agentId, code).catch((err: unknown) => log.error("onAgentExit hook 失败:", err)); },
+    },
+  });
 
-  const pipeline = new Pipeline(plugins, {
+  const pipeline: Pipeline = new Pipeline(plugins, {
     receive: {
       core: async (msg) => router.parseRoute(msg),
     },
@@ -56,32 +63,42 @@ export async function startBridge(opts: BridgeOptions = {}) {
       core: async (routed) => routed,
     },
     context: {
-      core: async (routed) => ctxBuilder.build(routed),
+      core: async (routed) => {
+        // 确保 sessions 表有记录：/api/sessions 列表与消息外键都依赖这一行
+        sessionMgr.getOrCreate(routed.message.fromUserId, routed.agentId);
+        return ctxBuilder.build(routed);
+      },
     },
     execute: {
       core: async (ctx) => {
-        const agent = await procMgr.getAgent(ctx.routed.agentId);
-
+        const agentId = ctx.routed.agentId;
+        const agent = await procMgr.getAgent(agentId);
+        const agentConfig = config.agents[agentId];
+        if (!agentConfig) throw new Error(`agent "${agentId}" 配置缺失`);
         outbound.noteContextToken(ctx.routed.message.fromUserId, ctx.routed.message.contextToken);
-        sessionMgr.saveMessage(ctx.routed.sessionId, "user", ctx.prompt);
 
-        const startTime = Date.now();
-        const result = await agent.prompt(ctx.routed.sessionId, ctx.prompt, () => {});
-
-        sessionMgr.saveMessage(ctx.routed.sessionId, "assistant", result.text);
-
-        return {
-          ctx,
-          text: result.text,
-          stopReason: result.stopReason,
-          durationMs: Date.now() - startTime,
-        };
+        return runAgentTurn(ctx, {
+          agent,
+          agentConfig,
+          sendDelta: (userId, delta) => outbound.sendText(userId, delta),
+          sessionStore: sessionMgr,
+          onSessionEnd: (seCtx) => pipeline.runSessionEndHooks(seCtx),
+          streamFlushMinChars: config.streamFlushMinChars,
+          streamFlushIdleMs: config.streamFlushIdleMs,
+          // ACP session 是否本进程新建（决定 systemPrompt 注入）；必须在 prompt 前判断
+          isNewAgentSession: !agent.hasSession(ctx.routed.sessionId),
+        });
       },
     },
     send: {
       core: async (result) => {
-        if (result.text.trim()) {
-          await outbound.sendText(result.ctx.routed.message.fromUserId, result.text);
+        // Stage 4 的 StreamCoalescer.finalize 已把完整回复发到微信，
+        // 这里只在回复为空且有 stopReason 异常时兜底，正常情况不再重复发送。
+        if (!result.text.trim() && result.stopReason !== "completed") {
+          await outbound.sendText(
+            result.ctx.routed.message.fromUserId,
+            `[agent 未返回内容] stopReason=${result.stopReason}`,
+          );
         }
       },
     },
@@ -152,6 +169,7 @@ export async function startBridge(opts: BridgeOptions = {}) {
     config,
     health,
     procMgr,
+    sessionMgr,
     loopPromise,
     async shutdown() {
       health.status = "stopped";

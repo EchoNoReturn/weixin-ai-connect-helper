@@ -8,7 +8,7 @@ import type { PluginRegistry, ParsedMessage, RoutedMessage, PromptContext, Agent
  */
 
 function emptyRegistry(): PluginRegistry {
-  return { onReceive: [], onRoute: [], beforePrompt: [], onPrompt: [], onSessionEnd: [], beforeSend: [] };
+  return { onReceive: [], onRoute: [], beforePrompt: [], onPrompt: [], onSessionEnd: [], beforeSend: [], onAgentReady: [], onAgentExit: [] };
 }
 
 function makeMsg(text: string): ParsedMessage {
@@ -23,19 +23,19 @@ describe("Full pipeline integration", () => {
     // Plugin: message-filter at Stage 1
     reg.onReceive.push({
       name: "message-filter",
-      handler: async (msg, next) => {
+      handler: async (msg: ParsedMessage, next: () => Promise<void>) => {
         order.push("plugin:filter");
         msg.text = msg.text.trim();
         return next();
       },
     });
 
-    // Plugin: system-prompt at Stage 3
+    // Plugin: system-prompt at Stage 3（hook 在 context core 之后，接收 PromptContext）
     reg.beforePrompt.push({
       name: "system-prompt",
-      handler: async (ctx, next) => {
+      handler: async (ctx: PromptContext, next: () => Promise<void>) => {
         order.push("plugin:system-prompt");
-        (ctx as any)._customPrompt = "You are a helpful assistant.";
+        ctx.systemPrompt = "You are a helpful assistant.";
         return next();
       },
     });
@@ -64,7 +64,7 @@ describe("Full pipeline integration", () => {
           order.push("stage:context");
           return {
             routed,
-            systemPrompt: (routed as any)._customPrompt ?? "",
+            systemPrompt: "",
             history: [],
             prompt: routed.message.text,
           } as PromptContext;
@@ -95,8 +95,8 @@ describe("Full pipeline integration", () => {
       "plugin:filter",
       "stage:receive",
       "stage:route",
-      "plugin:system-prompt",
       "stage:context",
+      "plugin:system-prompt",
       "stage:execute",
       "stage:send",
     ]);
@@ -109,7 +109,7 @@ describe("Full pipeline integration", () => {
     // Plugin: add footer at Stage 4
     reg.onPrompt.push({
       name: "add-footer",
-      handler: async (result, next) => {
+      handler: async (result: AgentResult, next: () => Promise<void>) => {
         result.text += "\n---";
         return next();
       },
@@ -134,7 +134,7 @@ describe("Full pipeline integration", () => {
 
     reg.onSessionEnd.push({
       name: "notify",
-      handler: async (ctx) => {
+      handler: async (ctx: any) => {
         notifications.push(`ended:${ctx.agentId}`);
       },
     });
@@ -151,6 +151,7 @@ describe("Full pipeline integration", () => {
       agentId: "opencode",
       sessionId: "s1",
       ownedByBridge: true,
+      notifyPolicy: "none" as const,
       durationMs: 1000,
       stopReason: "completed",
       notify: async () => {},
