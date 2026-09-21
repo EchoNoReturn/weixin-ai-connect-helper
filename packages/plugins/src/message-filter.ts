@@ -5,7 +5,7 @@ const MAX_LENGTH = 5000;
 export default function onReceive(
   msg: ParsedMessage,
   next: () => Promise<void>,
-): Promise<ParsedMessage> {
+): Promise<void> {
   if (msg.text.length > MAX_LENGTH) {
     msg.text = msg.text.slice(0, MAX_LENGTH);
   }
