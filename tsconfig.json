@@ -19,4 +19,4 @@
     "noPropertyAccessFromIndexSignature": false,
     "types": ["bun", "mri"]
   }
-}
+,"exclude": ["app/web", "node_modules", "dist", "rust", "tool"]}
