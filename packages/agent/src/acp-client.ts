@@ -131,6 +131,11 @@ export class AcpAgent {
     return { text: full, stopReason };
   }
 
+  /** 该 userKey 是否已有（本进程内的）ACP session；用于决定是否注入 systemPrompt */
+  hasSession(userKey: string): boolean {
+    return this.sessions.has(userKey);
+  }
+
   private async getSession(userKey: string): Promise<acp.ActiveSession> {
     let session = this.sessions.get(userKey);
     if (!session) {
