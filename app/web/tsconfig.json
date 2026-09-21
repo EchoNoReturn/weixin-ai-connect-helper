@@ -4,7 +4,9 @@
     "jsx": "react-jsx",
     "rootDir": "src",
     "outDir": "dist",
-    "lib": ["DOM"]
+    "lib": ["DOM", "ESNext"],
+    "types": ["vite/client"]
   },
   "include": ["src"],
+  "exclude": ["node_modules", "dist"]
 }
