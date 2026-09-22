@@ -1,46 +1,80 @@
+import path from "node:path";
+import { existsSync } from "node:fs";
 import { createLogger } from "@yoyojcoder-weixin-ai/core";
-import path from "path";
-import { isDevMode, resolveTool } from "./cli/runtime.ts";
+import type { BridgeConfig } from "@yoyojcoder-weixin-ai/core";
+import { SessionManager } from "@yoyojcoder-weixin-ai/orchestration";
+import { createApiServer } from "./web/api-server.ts";
+import { saveConfig } from "./config.ts";
+import { getConfigPath } from "./bin-dir.ts";
+import { isDevMode } from "./cli/runtime.ts";
+import { VERSION } from "./version.ts";
+import type { BridgeHealth } from "./bridge.ts";
 
-function findBunPath(): string {
-  // 开发模式下 process.execPath 就是 bun 自身
-  if (isDevMode()) {
-    return process.execPath;
-  }
-
-  // 生产模式：从 wah 同目录 / 常见安装路径 / PATH 中解析
-  const found = resolveTool("bun", {
-    envVar: "WAH_BUN_PATH",
-    extraDirs: [
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-      `${process.env.HOME}/.bun/bin`,
-      `${process.env.USERPROFILE}\\.bun\\bin`,
-    ],
-  });
-  return found ?? "bun"; // 回退：交给 PATH 解析
+export interface WebServerHandle {
+  port: number;
+  stop: () => void;
 }
 
-export function startWebServer(port: number): ReturnType<typeof Bun.spawn> {
+/**
+ * 启动内嵌 Web 控制台（API + 静态资源）。
+ * 生产/开发都直接由桥进程内 Bun.serve 提供；前端源码改动用 bun run dev:web（vite）开发，
+ * 构建产物 app/web/dist 由本服务托管。
+ */
+export function startWebServer(opts: {
+  port: number;
+  getHealth: () => BridgeHealth;
+  config: BridgeConfig;
+  sessionMgr: SessionManager;
+}): WebServerHandle {
   const log = createLogger("web");
-  log.info(`启动 Web 控制台 (port=${port})`);
 
-  const bunPath = findBunPath();
-  const webDir = isDevMode()
-    ? "app/web"
-    : path.join(path.dirname(process.argv[0] ?? process.execPath), "app", "web");
+  // 当前配置的可变引用（saveConfig 后更新，getConfig 读到最新值）
+  let currentConfig = opts.config;
 
-  const proc = Bun.spawn([bunPath, "run", "dev"], {
-    cwd: webDir,
-    stdio: ["ignore", "inherit", "inherit"],
-    env: { ...process.env, PORT: String(port) },
+  const staticDir = resolveStaticDir();
+  const pluginsFile = getConfigPath(currentConfig.pluginsFile || "plugins.json");
+
+  const server = createApiServer({
+    port: opts.port,
+    staticDir,
+    deps: {
+      getStatus: () => ({ health: opts.getHealth(), version: VERSION }),
+      getConfig: () => currentConfig,
+      saveConfig: async (next) => {
+        currentConfig = await saveConfig(next);
+        return currentConfig;
+      },
+      // DB 约定 unixepoch 秒，Web API 对外统一毫秒
+      listSessions: () =>
+        opts.sessionMgr.list().map((s) => ({
+          ...s,
+          createdAt: s.createdAt * 1000,
+          updatedAt: s.updatedAt * 1000,
+        })),
+      getSessionMessages: (id, limit) =>
+        opts.sessionMgr.getMessages(id, limit).map((m) => ({
+          ...m,
+          createdAt: m.createdAt * 1000,
+        })),
+      pluginsFile,
+    },
   });
 
-  proc.exited.then((code) => {
-    if (code !== 0) {
-      log.error(`Web 进程退出 code=${code}`);
-    }
-  });
+  const actualPort = server.port ?? opts.port;
+  log.info(`Web 控制台已启动: http://127.0.0.1:${actualPort}${staticDir ? "" : "（前端未构建，仅 API）"}`);
 
-  return proc;
+  return {
+    port: actualPort,
+    stop: () => server.stop(true),
+  };
+}
+
+function resolveStaticDir(): string | undefined {
+  const candidates = isDevMode()
+    ? [path.resolve(process.cwd(), "app/web/dist")]
+    : [path.join(path.dirname(process.execPath), "app", "web", "dist")];
+  for (const dir of candidates) {
+    if (existsSync(path.join(dir, "index.html"))) return dir;
+  }
+  return undefined;
 }

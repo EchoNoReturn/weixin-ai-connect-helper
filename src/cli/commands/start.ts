@@ -75,13 +75,15 @@ async function runForeground(opts: StartOptions): Promise<void> {
   }, 5000);
 
   if (opts.web) {
-    const webPort = config.webPort;
-    log.info(`Web 控制台: http://localhost:${webPort}`);
     const { startWebServer } = await import("../../web-server.ts");
-    const webProc = startWebServer(webPort);
-    abort.signal.addEventListener("abort", () => {
-      if (!webProc.killed) webProc.kill();
+    const web = startWebServer({
+      port: config.webPort,
+      getHealth: () => bridge.health,
+      config,
+      sessionMgr: bridge.sessionMgr,
     });
+    log.info(`Web 控制台: http://127.0.0.1:${web.port}`);
+    abort.signal.addEventListener("abort", () => web.stop());
   }
 
   function cleanup() {

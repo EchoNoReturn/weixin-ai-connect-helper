@@ -17,12 +17,28 @@ const DEFAULTS: BridgeConfig = {
     },
   },
   autoApprove: false,
-  webPort: 5173,
+  webPort: 3210,
   pluginsFile: "plugins.json",
   streamFlushMinChars: 200,
   streamFlushIdleMs: 3000,
   channels: [{ type: "weixin", id: "weixin-main", enabled: true }],
 };
+
+/**
+ * 持久化配置到 bridge.config.json（Web 控制台 /api/config、/api/agents 使用）。
+ * pluginsFile 相对配置目录可表达时写回相对路径，避免把开发机的绝对路径写进配置。
+ */
+export async function saveConfig(config: BridgeConfig): Promise<BridgeConfig> {
+  validateBridgeConfig(config);
+  const configPath = path.resolve(getConfigPath("bridge.config.json"));
+  const configDir = path.dirname(configPath);
+  const pluginsFile = path.isAbsolute(config.pluginsFile)
+    && path.resolve(config.pluginsFile).startsWith(configDir + path.sep)
+    ? path.relative(configDir, config.pluginsFile)
+    : config.pluginsFile;
+  await Bun.write(configPath, JSON.stringify({ ...config, pluginsFile }, null, 2) + "\n");
+  return config;
+}
 
 export async function loadConfig(): Promise<BridgeConfig> {
   const configPath = path.resolve(getConfigPath("bridge.config.json"));

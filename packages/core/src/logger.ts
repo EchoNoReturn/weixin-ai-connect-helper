@@ -14,6 +14,44 @@ export interface Logger {
 const LEVELS = ["debug", "info", "warn", "error"] as const;
 type Level = (typeof LEVELS)[number];
 
+export interface LogEntry {
+  ts: string;
+  level: Level;
+  scope: string;
+  msg: string;
+}
+
+type LogSubscriber = (entry: LogEntry) => void;
+
+const subscribers = new Set<LogSubscriber>();
+
+/** 环形缓冲：最近 N 条日志，供 WebSocket 新连接回放 */
+const RING_SIZE = 200;
+const ring: LogEntry[] = [];
+
+/** 订阅日志广播；返回退订函数 */
+export function onLogEntry(cb: LogSubscriber): () => void {
+  subscribers.add(cb);
+  return () => subscribers.delete(cb);
+}
+
+/** 读取最近的日志缓冲（WS 回放用） */
+export function recentLogs(limit = RING_SIZE): LogEntry[] {
+  return ring.slice(-limit);
+}
+
+function broadcast(entry: LogEntry): void {
+  ring.push(entry);
+  if (ring.length > RING_SIZE) ring.splice(0, ring.length - RING_SIZE);
+  for (const cb of subscribers) {
+    try {
+      cb(entry);
+    } catch {
+      // 订阅者异常不影响日志主流程
+    }
+  }
+}
+
 const COLORS: Record<Level, string> = {
   debug: "\x1b[90m",
   info: "\x1b[36m",
@@ -95,6 +133,8 @@ function createLogFn(level: Level, scope: string): LogFn {
       console.log(prefix, msg, ...args);
     }
     writeToFile(level, scope, msg, args);
+    const extra = args.length > 0 ? " " + args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ") : "";
+    broadcast({ ts: new Date().toISOString(), level, scope, msg: msg + extra });
   };
 }
 

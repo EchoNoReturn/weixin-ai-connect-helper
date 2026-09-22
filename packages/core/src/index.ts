@@ -11,7 +11,7 @@ export type {
   ChannelAdapter,
 } from "./channel.ts";
 export { assertAdapterOwnsMessage } from "./channel.ts";
-export { createLogger, initFileLogging, type Logger } from "./logger.ts";
+export { createLogger, initFileLogging, onLogEntry, recentLogs, type Logger, type LogEntry } from "./logger.ts";
 export { getDb, closeDb, getSchemaVersion } from "./db.ts";
 export { loadPlugins, runHooks, runStage, type BridgePlugin, type PluginEntry, type LifecyclePluginEntry, type PluginRegistry, type TransformHook, type LifecycleHook } from "./plugin-system.ts";
 export { Pipeline, type PipelineStageHandlers } from "./pipeline.ts";
