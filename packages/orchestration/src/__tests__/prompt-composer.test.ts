@@ -5,7 +5,14 @@ import type { PromptContext } from "@yoyojcoder-weixin-ai/core";
 function makeCtx(overrides: Partial<PromptContext> = {}): PromptContext {
   return {
     routed: {
-      message: { fromUserId: "u@im.wechat", text: "hi", receivedAt: 0 },
+      message: {
+        channelId: "weixin-main",
+        platform: "weixin",
+        conversationId: "u@im.wechat",
+        senderId: "u@im.wechat",
+        text: "hi",
+        receivedAt: 0,
+      },
       agentId: "opencode",
       sessionId: "s1",
     },
