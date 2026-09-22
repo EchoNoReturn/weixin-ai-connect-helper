@@ -22,12 +22,24 @@ export interface AgentResult {
   text: string;
   stopReason: string;
   durationMs: number;
+  /**
+   * 回复是否已在 Stage 4 经流式增量完整发出（streaming 渠道）。
+   * 为 true 时 Stage 5 不再重复发送正文（beforeSend 的修改也不会再送达）。
+   */
+  streamed?: boolean;
+  /**
+   * 本轮会话结束上下文，由 Stage 4 构建、Stage 5 发送完成后触发 onSessionEnd。
+   * 挂在 result 上是为了保证非流式渠道的通知排在回复正文之后。
+   */
+  sessionEnd?: SessionEndContext;
 }
 
 export interface SessionEndContext {
   agentId: string;
   sessionId: string;
   ownedByBridge: boolean;
+  /** 通知策略（来自 agent 配置）：none=不通知 own=仅本桥接创建的会话 all=所有会话 */
+  notifyPolicy?: "none" | "own" | "all";
   lastMessage?: string;
   durationMs: number;
   stopReason: string;

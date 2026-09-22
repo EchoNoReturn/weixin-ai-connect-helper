@@ -4,6 +4,7 @@ import { Pipeline, loadPlugins, createLogger, type ChannelAdapter, type ChannelC
 import { Router, ContextBuilder, SessionManager, AccessManager } from "@yoyojcoder-weixin-ai/orchestration";
 import { ProcessManager } from "@yoyojcoder-weixin-ai/agent";
 import { createChannelAdapters } from "./channels.ts";
+import { runAgentTurn } from "./agent-turn.ts";
 
 export interface BridgeHealth {
   status: "starting" | "connected" | "reconnecting" | "stopped";
@@ -67,37 +68,64 @@ export async function startBridge(opts: BridgeOptions = {}) {
     },
     execute: {
       core: async (ctx) => {
+        const incoming = ctx.routed.message;
+        const channel = channelsById.get(incoming.channelId);
+        if (!channel) throw new Error(`执行渠道不存在: ${incoming.channelId}`);
+        const agentConfig = config.agents[ctx.routed.agentId];
+        if (!agentConfig) throw new Error(`agent "${ctx.routed.agentId}" 配置缺失`);
         const agent = await procMgr.getAgent(ctx.routed.agentId);
 
-        sessionMgr.getOrCreate(ctx.routed.message.senderId, ctx.routed.agentId, ctx.routed.sessionId);
-        sessionMgr.saveMessage(ctx.routed.sessionId, "user", ctx.prompt);
+        // 确保 sessions 表有记录：/api/sessions 列表与消息外键都依赖这一行
+        sessionMgr.getOrCreate(incoming.senderId, ctx.routed.agentId, ctx.routed.sessionId);
 
-        const startTime = Date.now();
-        const result = await agent.prompt(ctx.routed.sessionId, ctx.prompt, () => {});
+        const sendText = (text: string) =>
+          channel.send({
+            channelId: incoming.channelId,
+            conversationId: incoming.conversationId,
+            text,
+            replyToMessageId: incoming.messageId,
+            replyContext: incoming.replyContext,
+          }).then(() => {});
 
-        sessionMgr.saveMessage(ctx.routed.sessionId, "assistant", result.text);
-
-        return {
-          ctx,
-          text: result.text,
-          stopReason: result.stopReason,
-          durationMs: Date.now() - startTime,
-        };
+        return runAgentTurn(ctx, {
+          agent,
+          agentConfig,
+          // 流式增量仅发往声明支持 streaming 的渠道；其余渠道由 Stage 5 整段发送
+          streaming: channel.capabilities.streaming,
+          sendDelta: sendText,
+          sendText,
+          sessionStore: sessionMgr,
+          streamFlushMinChars: config.streamFlushMinChars,
+          streamFlushIdleMs: config.streamFlushIdleMs,
+          // ACP session 是否本进程新建（决定 systemPrompt 注入）；必须在 prompt 前判断
+          isNewAgentSession: !agent.hasSession(ctx.routed.sessionId),
+        });
       },
     },
     send: {
       core: async (result) => {
-        if (result.text.trim()) {
-          const incoming = result.ctx.routed.message;
-          const channel = channelsById.get(incoming.channelId);
-          if (!channel) throw new Error(`发送渠道不存在: ${incoming.channelId}`);
-          await channel.send({
+        const incoming = result.ctx.routed.message;
+        const channel = channelsById.get(incoming.channelId);
+        if (!channel) throw new Error(`发送渠道不存在: ${incoming.channelId}`);
+        const send = (text: string) =>
+          channel.send({
             channelId: incoming.channelId,
             conversationId: incoming.conversationId,
-            text: result.text,
+            text,
             replyToMessageId: incoming.messageId,
             replyContext: incoming.replyContext,
           });
+        if (result.streamed) {
+          // 流式渠道：正文已在 Stage 4 发完，仅异常空回复兜底
+          if (!result.text.trim() && result.stopReason !== "completed") {
+            await send(`[agent 未返回内容] stopReason=${result.stopReason}`);
+          }
+        } else if (result.text.trim()) {
+          await send(result.text);
+        }
+        // 会话结束 hook 在正文发送之后触发，保证通知排在回复之后
+        if (result.sessionEnd) {
+          await pipeline.runSessionEndHooks(result.sessionEnd);
         }
       },
     },
@@ -178,6 +206,7 @@ export async function startBridge(opts: BridgeOptions = {}) {
     health,
     channels,
     procMgr,
+    sessionMgr,
     loopPromise,
     async shutdown() {
       if (shuttingDown) return;
