@@ -56,9 +56,10 @@ function BasicSection({ config, onSave }: { config: BridgeConfig; onSave: (p: Br
         <span style={{ flex: "none" }}>
           <input type="checkbox" style={{ width: "auto", marginRight: 6 }}
             checked={autoApprove} onChange={(e) => setAutoApprove(e.target.checked)} />
-          autoApprove（自动批准 agent 权限请求，PoC 行为）
+          自动批准所有 Agent 工具权限（默认关闭）
         </span>
       </label>
+      <p className="muted">开启后，Agent 请求的文件访问、命令执行等权限将自动批准；关闭时转发微信，由你选择。Agent 的方案选择、信息补充等提问始终交由你回答。微信用户仍须通过白名单或本机审批；此开关不改变操作系统及 Agent 自身的权限限制。保存后重启桥接生效。</p>
       <label><span>Web 控制台端口</span>
         <input value={webPort} onChange={(e) => setWebPort(e.target.value)} type="number" min={1} max={65535} />
       </label>
@@ -115,7 +116,7 @@ function AllowFromSection({ config, onSave }: { config: BridgeConfig; onSave: (p
   return (
     <form className="card" onSubmit={submit}>
       <h3>白名单（allowFrom）</h3>
-      <label><span>微信用户 ID，每行一个；留空 = 自动绑定首个用户</span>
+      <label><span>微信用户 ID，每行一个；留空 = 使用本机访问审批记录</span>
         <textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} />
       </label>
       <p className="muted">⚠️ 白名单是安全边界——agent 具有 shell 级访问权限。</p>

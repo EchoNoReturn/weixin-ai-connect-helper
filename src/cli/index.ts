@@ -138,4 +138,19 @@ access
     await execAccess(["revoke", userId]);
   });
 
-program.parse();
+const permissions = program.command("permissions").description("管理 Agent 工具权限自动批准（默认关闭，重启生效）");
+for (const [action, description] of [
+  ["status", "查看已保存的权限设置"],
+  ["enable", "开启所有 Agent 权限请求自动批准"],
+  ["disable", "关闭 Agent 权限请求自动批准"],
+] as const) {
+  permissions.command(action).description(description).action(async () => {
+    const { execPermissions } = await import("./commands/permissions.ts");
+    await execPermissions(action);
+  });
+}
+
+program.parseAsync().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});

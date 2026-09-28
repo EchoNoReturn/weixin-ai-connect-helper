@@ -18,6 +18,30 @@ const baseConfig: BridgeConfig = {
   channels: [{ type: "weixin", id: "weixin-main", enabled: true }],
 };
 
+it("Web 权限开关可开启和关闭，并拒绝非布尔值", async () => {
+  const ctx = makeDeps();
+  const server = createApiServer({ port: 0, deps: ctx.deps });
+  const base = `http://127.0.0.1:${server.port!}`;
+  try {
+    for (const enabled of [false, true, false]) {
+      const response = await fetch(`${base}/api/config`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoApprove: enabled }),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ config: { autoApprove: enabled, allowFrom: baseConfig.allowFrom }, restartRequired: true });
+      const current = await fetch(`${base}/api/config`);
+      expect(await current.json()).toMatchObject({ autoApprove: enabled });
+    }
+    const invalid = await fetch(`${base}/api/config`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ autoApprove: "true" }),
+    });
+    expect(invalid.status).toBe(400);
+    expect(ctx.getConfig().autoApprove).toBe(false);
+  } finally { server.stop(true); }
+});
+
 function makeDeps() {
   let config = structuredClone(baseConfig);
   const state = {
