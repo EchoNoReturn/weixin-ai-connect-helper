@@ -16,17 +16,20 @@ export class Router {
   ) {}
 
   parseRoute(msg: ParsedMessage): RoutedMessage {
-    const accessKey = this.getAccessKey(msg);
-    if (!this.isAllowed(msg, accessKey)) {
-      throw new Error(`非白名单用户 ${accessKey}`);
-    }
-
+    this.assertAllowed(msg);
     const { agentId, text } = this.parsePrefix(msg);
     return {
       message: { ...msg, text },
       agentId,
       sessionId: this.getSessionId(msg, agentId),
     };
+  }
+
+  assertAllowed(msg: ParsedMessage): void {
+    const accessKey = this.getAccessKey(msg);
+    if (!this.isAllowed(msg, accessKey)) {
+      throw new Error(`非白名单用户 ${accessKey}`);
+    }
   }
 
   private isAllowed(msg: ParsedMessage, accessKey: string): boolean {
