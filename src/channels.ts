@@ -4,6 +4,7 @@ import {
   LocalWebhookChannelAdapter,
   WeixinChannelAdapter,
 } from "@yoyojcoder-weixin-ai/transport";
+import { startupNotification } from "./notifications.ts";
 
 export async function createChannelAdapters(config: BridgeConfig): Promise<ChannelAdapter[]> {
   const adapters: ChannelAdapter[] = [];
@@ -18,7 +19,7 @@ export async function createChannelAdapters(config: BridgeConfig): Promise<Chann
     switch (channel.type) {
       case "weixin": {
         const creds = await ensureWeixinLogin();
-        adapters.push(new WeixinChannelAdapter(creds, { channelId }));
+        adapters.push(new WeixinChannelAdapter(creds, { channelId, startupText: startupNotification() }));
         break;
       }
       case "webhook": {
