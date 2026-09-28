@@ -1,5 +1,6 @@
 import type { PromptContext, AgentResult, AgentConfig } from "@yoyojcoder-weixin-ai/core";
 import { StreamCoalescer } from "@yoyojcoder-weixin-ai/agent";
+import type { AgentInteraction } from "@yoyojcoder-weixin-ai/agent";
 import { composePrompt } from "@yoyojcoder-weixin-ai/orchestration";
 
 /**
@@ -17,7 +18,7 @@ import { composePrompt } from "@yoyojcoder-weixin-ai/orchestration";
  */
 
 export interface AgentLike {
-  prompt(sessionId: string, text: string, onChunk: (fullText: string) => void): Promise<{ text: string; stopReason: string }>;
+  prompt(sessionId: string, text: string, onChunk: (fullText: string) => void, interaction?: AgentInteraction): Promise<{ text: string; stopReason: string }>;
 }
 
 export interface SessionStoreLike {
@@ -26,6 +27,7 @@ export interface SessionStoreLike {
 }
 
 export interface AgentTurnDeps {
+  interaction?: AgentInteraction;
   agent: AgentLike;
   agentConfig: AgentConfig;
   /** 渠道是否支持流式（capabilities.streaming）；false 时不发任何增量 */
@@ -63,10 +65,22 @@ export async function runAgentTurn(ctx: PromptContext, deps: AgentTurnDeps): Pro
 
   // onChunk 是同步回调；内部异步冲刷串行化，避免并发发送乱序
   let flushQueue: Promise<void> = Promise.resolve();
-  const result = await deps.agent.prompt(sessionId, finalPrompt, (full) => {
-    if (!deps.streaming) return;
-    flushQueue = flushQueue.then(() => coalescer.update(full));
-  });
+  let flushError: unknown;
+  const result = await (async () => {
+    try {
+      return await deps.agent.prompt(sessionId, finalPrompt, (full) => {
+        if (!deps.streaming) return;
+        flushQueue = flushQueue.then(async () => {
+          if (flushError !== undefined) return;
+          try { await coalescer.update(full); } catch (error) { flushError = error; }
+        });
+      }, deps.interaction);
+    } finally {
+      // Drain partial replies before the caller sends an error notice, even on prompt failure.
+      await flushQueue;
+    }
+  })();
+  if (flushError !== undefined) throw flushError;
   if (deps.streaming) {
     // 等所有排队的冲刷完成后，再冲刷剩余文本
     await flushQueue;

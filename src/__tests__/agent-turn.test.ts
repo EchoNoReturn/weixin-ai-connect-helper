@@ -78,6 +78,22 @@ function fakeAgent(chunks: string[], stopReason = "completed"): AgentLike & { re
 }
 
 describe("runAgentTurn", () => {
+  it("drains partial sends before propagating prompt failure", async () => {
+    const events: string[] = [];
+    const { deps } = makeDeps({ prompt: async (_id, _text, chunk) => {
+      chunk("partial");
+      throw new Error("agent crashed");
+    } }, { minChars: 1 });
+    deps.sendDelta = async () => { await Bun.sleep(10); events.push("partial sent"); };
+    try { await runAgentTurn(makeCtx(), deps); } catch { events.push("failure reported"); }
+    expect(events).toEqual(["partial sent", "failure reported"]);
+  });
+
+  it("propagates asynchronous delivery failure without an unhandled rejection", async () => {
+    const { deps } = makeDeps(fakeAgent(["partial", "more"]), { minChars: 1 });
+    deps.sendDelta = async () => { throw new Error("delivery failed"); };
+    await expect(runAgentTurn(makeCtx(), deps)).rejects.toThrow("delivery failed");
+  });
   it("composes prompt with systemPrompt on first turn", async () => {
     const agent = fakeAgent(["ok"]);
     const { deps } = makeDeps(agent);
