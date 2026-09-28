@@ -23,7 +23,7 @@
     "typecheck": "bunx tsc --noEmit && bunx tsc --noEmit -p app/web/tsconfig.json"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "^1.1.0",
+    "@agentclientprotocol/sdk": "1.3.0",
     "@tencent-weixin/openclaw-weixin": "2.4.6",
     "commander": "^15.0.0",
     "mri": "^1.2.0"
