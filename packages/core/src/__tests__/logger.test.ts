@@ -2,6 +2,16 @@ import { describe, it, expect } from "bun:test";
 import { createLogger, onLogEntry, recentLogs, type LogEntry } from "../logger.ts";
 
 describe("logger 订阅广播", () => {
+  it("保留 Error 堆栈和 cause，循环对象不使日志崩溃", () => {
+    const error = new Error("agent failed", { cause: new Error("spawn ENOENT") });
+    const circular: { self?: unknown } = {};
+    circular.self = circular;
+    expect(() => createLogger("errors").error("失败", error, circular)).not.toThrow();
+    const message = recentLogs(1)[0]!.msg;
+    expect(message).toContain("agent failed");
+    expect(message).toContain("spawn ENOENT");
+    expect(message).toContain("logger.test.ts");
+  });
   it("订阅者收到日志条目", () => {
     const received: LogEntry[] = [];
     const off = onLogEntry((e) => received.push(e));

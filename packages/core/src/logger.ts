@@ -1,6 +1,7 @@
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
+import { inspect } from "node:util";
 
 type LogFn = (msg: string, ...args: unknown[]) => void;
 
@@ -110,10 +111,17 @@ function getLogStream(): fs.WriteStream | null {
   }
 }
 
+function formatArg(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value instanceof Error) return inspect(value, { depth: 5, colors: false });
+  try { return JSON.stringify(value) ?? String(value); }
+  catch { return inspect(value, { depth: 5, colors: false }); }
+}
+
 function writeToFile(level: Level, scope: string, msg: string, args: unknown[]): void {
   try {
     const ts = new Date().toISOString();
-    const line = `[${ts}] [${level.toUpperCase()}] [${scope}] ${msg} ${args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ")}\n`;
+    const line = `[${ts}] [${level.toUpperCase()}] [${scope}] ${msg} ${args.map(formatArg).join(" ")}\n`;
     const stream = getLogStream();
     stream?.write(line);
   } catch {
@@ -133,7 +141,7 @@ function createLogFn(level: Level, scope: string): LogFn {
       console.log(prefix, msg, ...args);
     }
     writeToFile(level, scope, msg, args);
-    const extra = args.length > 0 ? " " + args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ") : "";
+    const extra = args.length > 0 ? " " + args.map(formatArg).join(" ") : "";
     broadcast({ ts: new Date().toISOString(), level, scope, msg: msg + extra });
   };
 }
