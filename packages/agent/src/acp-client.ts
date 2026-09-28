@@ -2,6 +2,10 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import type { AgentConfig } from "@yoyojcoder-weixin-ai/core";
+import { selectPermission } from "./permission.ts";
+import type { AgentInteraction } from "./interaction.ts";
+
+interface ActiveInteraction { handler: AgentInteraction; signal: AbortSignal }
 
 export interface PromptResult {
   text: string;
@@ -22,6 +26,7 @@ export class AcpAgent {
     private cfg: AgentConfig,
     private proc: ChildProcess,
     private conn: acp.ClientConnection,
+    private interactions: Map<string, ActiveInteraction>,
   ) {}
 
   static async start(
@@ -42,20 +47,31 @@ export class AcpAgent {
       Readable.toWeb(proc.stdout!) as ReadableStream<Uint8Array>,
     );
 
+    const interactions = new Map<string, ActiveInteraction>();
     const app = acp
       .client({ name: "weixin-ai-connect-helper" })
-      .onRequest(acp.methods.client.session.requestPermission, (ctx) => {
+      .onRequest(acp.methods.client.session.requestPermission, async (ctx) => {
         const { toolCall, options } = ctx.params;
-        const allow =
-          options.find((o) => o.kind?.startsWith("allow")) ?? options[0];
+        const allow = selectPermission(opts.autoApprove, options);
         console.log(
           `[acp:${id}] 权限请求: ${toolCall?.title ?? "未知工具"} → ` +
-            (opts.autoApprove && allow ? `自动批准 (${allow.name})` : "取消"),
+            (opts.autoApprove && allow ? `自动批准 (${allow.name})` : "请求用户决策"),
         );
         if (opts.autoApprove && allow) {
           return { outcome: { outcome: "selected" as const, optionId: allow.optionId } };
         }
+        const active = interactions.get(ctx.params.sessionId);
+        if (active && !opts.autoApprove) {
+          return active.handler.permission(ctx.params, AbortSignal.any([ctx.signal, active.signal]));
+        }
         return { outcome: { outcome: "cancelled" as const } };
+      })
+      .onRequest(acp.methods.client.elicitation.create, async (ctx) => {
+        // Request-scoped (pre-session) questions cannot safely be assigned to a sender.
+        const sessionId = "sessionId" in ctx.params ? ctx.params.sessionId : undefined;
+        const active = typeof sessionId === "string" ? interactions.get(sessionId) : undefined;
+        if (!active) return { action: "cancel" };
+        return active.handler.elicit(ctx.params, AbortSignal.any([ctx.signal, active.signal]));
       });
 
     const conn = app.connect(stream);
@@ -65,12 +81,14 @@ export class AcpAgent {
         clientCapabilities: {
           fs: { readTextFile: false, writeTextFile: false },
           terminal: false,
+          elicitation: { form: {} },
         },
         clientInfo: { name: "weixin-ai-connect-helper", version: "0.1.0" },
       });
-      const agent = new AcpAgent(id, cfg, proc, conn);
+      const agent = new AcpAgent(id, cfg, proc, conn, interactions);
       proc.on("exit", (code) => {
         agent.exited = true;
+        conn.close();
         console.error(`[acp:${id}] 进程退出 code=${code}`);
         for (const listener of agent.exitListeners) listener();
         agent.exitListeners.clear();
@@ -84,11 +102,11 @@ export class AcpAgent {
     }
   }
 
-  prompt(userKey: string, text: string, onChunk: ChunkHandler): Promise<PromptResult> {
+  prompt(userKey: string, text: string, onChunk: ChunkHandler, interaction?: AgentInteraction): Promise<PromptResult> {
     const prev = this.queues.get(userKey) ?? Promise.resolve();
     const current = prev.then(
-      () => this.runTurn(userKey, text, onChunk),
-      () => this.runTurn(userKey, text, onChunk),
+      () => this.runTurn(userKey, text, onChunk, interaction),
+      () => this.runTurn(userKey, text, onChunk, interaction),
     );
     this.queues.set(userKey, current);
     void current.finally(() => {
@@ -101,34 +119,43 @@ export class AcpAgent {
     userKey: string,
     text: string,
     onChunk: ChunkHandler,
+    interaction?: AgentInteraction,
   ): Promise<PromptResult> {
     const session = await this.getSession(userKey);
+    const turn = new AbortController();
+    if (interaction) this.interactions.set(session.sessionId, {
+      handler: interaction, signal: AbortSignal.any([turn.signal, this.conn.signal]),
+    });
+    try {
+      let full = "";
+      const promptPromise = session.prompt(text);
+      const promptFailure = promptPromise.then(
+        () => new Promise<never>(() => {}),
+        (error: unknown) => Promise.reject(error),
+      );
 
-    let full = "";
-    const promptPromise = session.prompt(text);
-    const promptFailure = promptPromise.then(
-      () => new Promise<never>(() => {}),
-      (error: unknown) => Promise.reject(error),
-    );
-
-    let stopReason = "unknown";
-    while (true) {
-      const msg = await Promise.race([session.nextUpdate(), promptFailure]);
-      if (msg.kind === "stop") {
-        stopReason = msg.stopReason;
-        break;
+      let stopReason = "unknown";
+      while (true) {
+        const msg = await Promise.race([session.nextUpdate(), promptFailure]);
+        if (msg.kind === "stop") {
+          stopReason = msg.stopReason;
+          break;
+        }
+        const update = msg.update;
+        if (
+          update.sessionUpdate === "agent_message_chunk" &&
+          update.content.type === "text"
+        ) {
+          full += update.content.text;
+          onChunk(full);
+        }
       }
-      const update = msg.update;
-      if (
-        update.sessionUpdate === "agent_message_chunk" &&
-        update.content.type === "text"
-      ) {
-        full += update.content.text;
-        onChunk(full);
-      }
+      await promptPromise;
+      return { text: full, stopReason };
+    } finally {
+      turn.abort();
+      this.interactions.delete(session.sessionId);
     }
-    await promptPromise;
-    return { text: full, stopReason };
   }
 
   /** 该 userKey 是否已有（本进程内的）ACP session；用于决定是否注入 systemPrompt */
