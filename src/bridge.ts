@@ -5,6 +5,9 @@ import { Router, ContextBuilder, SessionManager, AccessManager } from "@yoyojcod
 import { ProcessManager } from "@yoyojcoder-weixin-ai/agent";
 import { createChannelAdapters } from "./channels.ts";
 import { runAgentTurn } from "./agent-turn.ts";
+import { processMessageWithFeedback } from "./notifications.ts";
+import { UserDecisions } from "./user-decisions.ts";
+import { createAgentInteraction } from "./agent-interaction.ts";
 
 export interface BridgeHealth {
   status: "starting" | "connected" | "reconnecting" | "stopped";
@@ -55,6 +58,13 @@ export async function startBridge(opts: BridgeOptions = {}) {
   const ctxBuilder = new ContextBuilder();
   const sessionMgr = new SessionManager();
   const procMgr = new ProcessManager(config.agents, { autoApprove: config.autoApprove });
+  const decisions = new UserDecisions(async (message, text) => {
+    const channel = channelsById.get(message.channelId);
+    if (!channel) throw new Error(`交互渠道不存在: ${message.channelId}`);
+    await channel.send({ channelId: message.channelId, conversationId: message.conversationId,
+      text, replyContext: message.replyContext, replyToMessageId: message.messageId });
+  });
+  abort.addEventListener("abort", () => decisions.close(), { once: true });
 
   const pipeline = new Pipeline(plugins, {
     receive: {
@@ -88,6 +98,7 @@ export async function startBridge(opts: BridgeOptions = {}) {
           }).then(() => {});
 
         return runAgentTurn(ctx, {
+          interaction: createAgentInteraction(decisions, incoming, ctx.routed.agentId, sendText),
           agent,
           agentConfig,
           // 流式增量仅发往声明支持 streaming 的渠道；其余渠道由 Stage 5 整段发送
@@ -117,11 +128,14 @@ export async function startBridge(opts: BridgeOptions = {}) {
           });
         if (result.streamed) {
           // 流式渠道：正文已在 Stage 4 发完，仅异常空回复兜底
-          if (!result.text.trim() && result.stopReason !== "completed") {
-            await send(`[agent 未返回内容] stopReason=${result.stopReason}`);
+          if (!result.text.trim()) {
+            await send(`[执行未完成] Agent 未返回内容，请检查权限配置及本机日志。stopReason=${result.stopReason}`);
           }
-        } else if (result.text.trim()) {
-          await send(result.text);
+        } else {
+          await send(result.text.trim() ? result.text : `[执行未完成] Agent 未返回内容，请检查权限配置及本机日志。stopReason=${result.stopReason}`);
+        }
+        if (result.text.trim() && ["error", "aborted", "cancelled", "refusal"].includes(result.stopReason)) {
+          await send(`[执行未完成] 本次请求已中断，以上可能只是部分回复。stopReason=${result.stopReason}`);
         }
         // 会话结束 hook 在正文发送之后触发，保证通知排在回复之后
         if (result.sessionEnd) {
@@ -164,11 +178,11 @@ export async function startBridge(opts: BridgeOptions = {}) {
   const onMessage = async (msg: IncomingMessage) => {
     health.lastMessageAt = Date.now();
     log.info(`收到 [${msg.channelId}] ${msg.senderId}: ${msg.text.slice(0, 80)}`);
-    try {
+    await processMessageWithFeedback(msg, async () => {
+      router.assertAllowed(msg);
+      if (await decisions.handle(msg)) return;
       await pipeline.run(msg);
-    } catch (err) {
-      log.error("处理消息失败:", err);
-    }
+    }, channelsById.get(msg.channelId), log);
   };
 
   async function runChannel(channel: ChannelAdapter): Promise<void> {
@@ -213,6 +227,7 @@ export async function startBridge(opts: BridgeOptions = {}) {
       shuttingDown = true;
       health.status = "stopped";
       log.info("正在停止...");
+      decisions.close();
       loopAbort.abort();
       await loopPromise;
       await procMgr.dispose();
