@@ -63,3 +63,9 @@ declare module "@tencent-weixin/openclaw-weixin/dist/src/storage/sync-buf.js" {
 declare module "openclaw/plugin-sdk/account-id" {
   export function normalizeAccountId(raw: string): string;
 }
+
+declare module "@tencent-weixin/openclaw-weixin/dist/src/messaging/inbound.js" {
+  export function restoreContextTokens(accountId: string): void;
+  export function getContextToken(accountId: string, userId: string): string | undefined;
+  export function setContextToken(accountId: string, userId: string, token: string): void;
+}

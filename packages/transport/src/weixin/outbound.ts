@@ -32,6 +32,7 @@ export class WeixinOutbound {
           baseUrl: this.creds.baseUrl,
           token: this.creds.token,
           contextToken,
+          timeoutMs: 15_000,
         },
       });
       messageIds.push(receipt.messageId);

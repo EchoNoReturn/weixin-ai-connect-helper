@@ -74,3 +74,5 @@ export {
 } from "@tencent-weixin/openclaw-weixin/dist/src/storage/sync-buf.js";
 
 export { normalizeAccountId } from "./openclaw-shim.ts";
+
+export { restoreContextTokens, getContextToken, setContextToken } from "@tencent-weixin/openclaw-weixin/dist/src/messaging/inbound.js";

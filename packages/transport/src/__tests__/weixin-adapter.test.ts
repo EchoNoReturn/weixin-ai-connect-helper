@@ -5,6 +5,55 @@ import { WeixinChannelAdapter } from "../weixin/adapter.ts";
 const creds = { accountId: "wx-account", baseUrl: "https://example.test", token: "secret" };
 
 describe("WeixinChannelAdapter", () => {
+  test("startup sends to login owner using restored context, only once across reconnects", async () => {
+    const sent: unknown[][] = [];
+    const adapter = new WeixinChannelAdapter({ ...creds, userId: "owner" }, {
+      startupText: "启动通知",
+      contextStore: { restore: () => {}, get: () => "saved-ctx", set: () => {} },
+      sender: { sendText: async (...args) => { sent.push(args); return ["id"]; } },
+      inboundRunner: async () => {},
+    });
+    const options = { abortSignal: new AbortController().signal, onMessage: async () => {} };
+    await adapter.start(options);
+    await adapter.start(options);
+    expect(sent).toEqual([["owner", "启动通知", "saved-ctx"]]);
+  });
+
+  test("startup failure does not stop receiving; retries only for owner with fresh context", async () => {
+    const sent: unknown[][] = [];
+    const stored: unknown[][] = [];
+    const received: string[] = [];
+    const adapter = new WeixinChannelAdapter({ ...creds, userId: "owner" }, {
+      startupText: "启动通知",
+      contextStore: { restore: () => {}, get: () => undefined, set: (...args) => { stored.push(args); } },
+      sender: { sendText: async (...args) => {
+        sent.push(args);
+        if (sent.length === 1) throw new Error("context expired");
+        return ["id"];
+      } },
+      inboundRunner: async ({ onMessage }) => {
+        for (const user of ["stranger", "owner", "owner"]) {
+          await onMessage({ fromUserId: user, text: "hello", contextToken: "fresh", receivedAt: 0 });
+        }
+      },
+    });
+    await adapter.start({ abortSignal: new AbortController().signal, onMessage: async (msg) => { received.push(msg.senderId); } });
+    expect(sent).toEqual([["owner", "启动通知", undefined], ["owner", "启动通知", "fresh"]]);
+    expect(received).toEqual(["stranger", "owner", "owner"]);
+    expect(stored).toContainEqual([creds.accountId, "owner", "fresh"]);
+  });
+
+  test("missing login owner never sends host information to arbitrary senders", async () => {
+    let sends = 0;
+    const adapter = new WeixinChannelAdapter(creds, {
+      startupText: "host details",
+      contextStore: { restore: () => {}, get: () => undefined, set: () => {} },
+      sender: { sendText: async () => { sends++; return []; } },
+      inboundRunner: async ({ onMessage }) => { await onMessage({ fromUserId: "stranger", text: "hello", receivedAt: 0 }); },
+    });
+    await adapter.start({ abortSignal: new AbortController().signal, onMessage: async () => {} });
+    expect(sends).toBe(0);
+  });
   test("normalizes inbound WeChat messages", async () => {
     const states: string[] = [];
     const adapter = new WeixinChannelAdapter(creds, {

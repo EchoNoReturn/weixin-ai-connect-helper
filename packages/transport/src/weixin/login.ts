@@ -15,6 +15,7 @@ export interface WeixinCredentials {
   accountId: string;
   token: string;
   baseUrl: string;
+  userId?: string;
 }
 
 const LOGIN_TIMEOUT_MS = 480_000;
@@ -32,6 +33,7 @@ export function checkWeixinCredentials(): WeixinCredentials | null {
 
   return {
     accountId: existingId,
+    userId: acc.userId,
     token: acc.token,
     baseUrl: acc.baseUrl?.trim() || DEFAULT_BASE_URL,
   };
@@ -45,6 +47,7 @@ export async function ensureWeixinLogin(): Promise<WeixinCredentials> {
       console.log(`[weixin] 使用已登录账号 ${existingId}`);
       return {
         accountId: existingId,
+        userId: acc.userId,
         token: acc.token,
         baseUrl: acc.baseUrl?.trim() || DEFAULT_BASE_URL,
       };
@@ -87,6 +90,7 @@ export async function ensureWeixinLogin(): Promise<WeixinCredentials> {
   return {
     accountId,
     token: result.botToken,
+    userId: result.userId,
     baseUrl: result.baseUrl?.trim() || DEFAULT_BASE_URL,
   };
 }
