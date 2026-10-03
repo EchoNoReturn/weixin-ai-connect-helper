@@ -16,9 +16,11 @@ if ($PSVersionTable.PSVersion.Major -lt 6) {
 # 配置
 $Repo = "EchoNoReturn/weixin-ai-connect-helper"
 $BinaryName = "wah"
-$InstallDir = Join-Path $env:LOCALAPPDATA "Programs\wah"
-$StateDir = Join-Path $env:USERPROFILE ".wah"
-$LegacyInstallDir = $StateDir
+# 目录可用环境变量覆盖，与 install.sh 的 INSTALL_DIR / BRIDGE_STATE_DIR 对齐
+$InstallDir = if ($env:INSTALL_DIR) { $env:INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "Programs\wah" }
+$StateDir = if ($env:BRIDGE_STATE_DIR) { $env:BRIDGE_STATE_DIR } else { Join-Path $env:USERPROFILE ".wah" }
+# 旧版把程序与状态都放在 ~/.wah（与 BRIDGE_STATE_DIR 无关，固定按家目录判断）
+$LegacyInstallDir = Join-Path $env:USERPROFILE ".wah"
 $LegacyStateDir = Join-Path $env:USERPROFILE ".weixin-ai-connect-helper"
 
 # 输出函数（注意：不要遮蔽内置的 Write-Error cmdlet）
@@ -30,24 +32,52 @@ function Exit-WithError {
     throw ($args -join " ")
 }
 
-# 检测架构
+# 检测架构（只发布 amd64）；不支持的平台给出可读提示而不是 404
 function Get-Arch {
     $arch = $env:PROCESSOR_ARCHITECTURE
     switch ($arch) {
         "AMD64" { return "amd64" }
-        "ARM64" { return "arm64" }
+        "ARM64" { Exit-WithError "暂无 Windows ARM64 的预编译包；请参考 README「从源码构建」自行编译。" }
+        "x86"   { Exit-WithError "暂无 32 位 Windows 的预编译包；请在 64 位 PowerShell 中运行。" }
         default { Exit-WithError "不支持的架构: $arch" }
     }
 }
 
-# 获取最新版本
-function Get-LatestVersion {
+# 获取最新 Release（保留完整对象，用于校验下载产物）
+function Get-LatestRelease {
     try {
-        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
-        return $release.tag_name
+        return Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
     } catch {
         Exit-WithError "获取最新版本失败（网络问题或 GitHub 限流）: $($_.Exception.Message)"
     }
+}
+
+# 计算文件 sha256（用 .NET 实现，不依赖 Get-FileHash：部分机器禁用了模块自动加载）
+function Get-Sha256Hex {
+    param([string]$Path)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        try {
+            return ([BitConverter]::ToString($sha.ComputeHash($stream)) -replace '-', '').ToLower()
+        } finally { $stream.Dispose() }
+    } finally { $sha.Dispose() }
+}
+
+# 校验下载产物；拿不到 digest 时只告警，不影响安装
+function Test-ArchiveChecksum {
+    param([string]$Path, [string]$Name, $Assets)
+    $asset = $Assets | Where-Object { $_.name -eq $Name } | Select-Object -First 1
+    if (-not $asset -or -not $asset.digest) {
+        Write-Warn "未能获取 $Name 的校验值，跳过完整性校验"
+        return
+    }
+    $expected = ($asset.digest -replace '^sha256:', '').ToLower()
+    $actual = Get-Sha256Hex -Path $Path
+    if ($actual -ne $expected) {
+        Exit-WithError "校验失败：$Name 的 sha256 与 Release 公布值不一致，已中止安装（下载损坏或被篡改）"
+    }
+    Write-Info "已校验 $Name 完整性（sha256）"
 }
 
 # 停止运行中的服务（wah stop 自身能容忍"未运行"状态）
@@ -83,7 +113,8 @@ function Remove-FromPath {
 # 安装
 function Install-Wah {
     $arch = Get-Arch
-    $version = Get-LatestVersion
+    $release = Get-LatestRelease
+    $version = $release.tag_name
 
     Write-Info "检测到架构: $arch"
     Write-Info "最新版本: $version"
@@ -103,6 +134,7 @@ function Install-Wah {
         Write-Info "正在下载..."
         $archivePath = Join-Path $tmpDir $archiveName
         Invoke-WebRequest -Uri $url -OutFile $archivePath -UseBasicParsing
+        Test-ArchiveChecksum -Path $archivePath -Name $archiveName -Assets $release.assets
 
         # 解压
         Write-Info "正在解压..."
@@ -119,6 +151,14 @@ function Install-Wah {
         Write-Info "正在安装到 $InstallDir..."
         Copy-Item (Join-Path $tmpDir "wah.exe") (Join-Path $InstallDir "$BinaryName.exe") -Force
         Copy-Item (Join-Path $tmpDir "pgh.exe") (Join-Path $InstallDir "pgh.exe") -Force
+
+        # Web 控制台静态资源：与可执行文件同级的 app/web/dist（web-server.ts 的查找约定）
+        $appSrc = Join-Path $tmpDir "app"
+        if (Test-Path $appSrc) {
+            $appDst = Join-Path $InstallDir "app"
+            Remove-Item -Recurse -Force $appDst -ErrorAction SilentlyContinue
+            Copy-Item -Recurse -Force $appSrc $appDst
+        }
 
         # 配置文件仅在目标不存在时复制，避免重装覆盖用户修改
         foreach ($f in @("plugins.json", "bridge.config.json")) {
@@ -173,6 +213,7 @@ function Uninstall-Wah {
     if (Test-Path $InstallDir) {
         Remove-Item -Force -Path (Join-Path $InstallDir "$BinaryName.exe") -ErrorAction SilentlyContinue
         Remove-Item -Force -Path (Join-Path $InstallDir "pgh.exe") -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force -Path (Join-Path $InstallDir "app") -ErrorAction SilentlyContinue
         Remove-Item -Force -Path (Join-Path $InstallDir "plugins.json") -ErrorAction SilentlyContinue
         Remove-Item -Force -Path (Join-Path $InstallDir "bridge.config.json") -ErrorAction SilentlyContinue
         Remove-Item -Force -Path $InstallDir -ErrorAction SilentlyContinue

@@ -26,9 +26,9 @@ curl -fsSL https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-help
 ```
 
 安装脚本会自动：
-- 检测你的系统架构（Intel/Apple Silicon）
-- 下载最新版本
-- 将程序安装到 `~/.local/bin`，将登录凭证、配置、数据库和日志保存在 `~/.wah`
+- 检测你的系统架构（Linux x86_64 / macOS Apple Silicon）
+- 下载最新版本，并按 GitHub Release 公布的 sha256 校验产物
+- 将程序与 Web 控制台静态资源安装到 `~/.local/bin`，将登录凭证、配置、数据库和日志保存在 `~/.wah`
 - 自动配置 PATH 环境变量
 
 自定义安装目录：
@@ -37,6 +37,8 @@ INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/EchoNoRe
 ```
 
 可通过 `BRIDGE_STATE_DIR` 自定义状态目录。卸载只删除程序文件，默认保留状态数据。
+
+> 目前只提供 Linux x86_64 与 macOS Apple Silicon 的预编译包；Intel Mac、ARM Linux 等平台请参考下方「从源码构建」自行编译（安装脚本会直接提示，不会去下载不存在的产物）。
 
 卸载：
 ```bash
@@ -51,6 +53,13 @@ irm https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main
 ```
 
 程序默认安装到 `%LOCALAPPDATA%\Programs\wah`，状态数据保存在 `%USERPROFILE%\.wah`；卸载默认保留状态数据。
+下载同样会按 Release 公布的 sha256 校验。可用环境变量覆盖目录（与 `install.sh` 对齐）：
+
+```powershell
+$env:INSTALL_DIR = "D:\tools\wah"
+$env:BRIDGE_STATE_DIR = "D:\wah-state"
+irm https://raw.githubusercontent.com/EchoNoReturn/weixin-ai-connect-helper/main/install.ps1 | iex
+```
 
 卸载：
 ```powershell

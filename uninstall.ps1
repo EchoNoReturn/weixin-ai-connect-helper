@@ -7,10 +7,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# 配置：程序目录与状态目录分离。
-$InstallDir = Join-Path $env:LOCALAPPDATA "Programs\wah"
-$StateDir = Join-Path $env:USERPROFILE ".wah"
-$LegacyInstallDir = $StateDir
+# 配置：程序目录与状态目录分离，且可用环境变量覆盖（与 install.ps1 对齐）。
+$InstallDir = if ($env:INSTALL_DIR) { $env:INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "Programs\wah" }
+$StateDir = if ($env:BRIDGE_STATE_DIR) { $env:BRIDGE_STATE_DIR } else { Join-Path $env:USERPROFILE ".wah" }
+# 旧版把程序与状态都放在 ~/.wah（固定按家目录判断）
+$LegacyInstallDir = Join-Path $env:USERPROFILE ".wah"
 $LegacyStateDir = Join-Path $env:USERPROFILE ".weixin-ai-connect-helper"
 
 # 输出函数（注意：不要遮蔽内置的 Write-Error cmdlet）
@@ -43,6 +44,7 @@ function Uninstall-Wah {
     if (Test-Path $InstallDir) {
         Remove-Item -Force -Path (Join-Path $InstallDir "wah.exe") -ErrorAction SilentlyContinue
         Remove-Item -Force -Path (Join-Path $InstallDir "pgh.exe") -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force -Path (Join-Path $InstallDir "app") -ErrorAction SilentlyContinue
         Remove-Item -Force -Path (Join-Path $InstallDir "plugins.json") -ErrorAction SilentlyContinue
         Remove-Item -Force -Path (Join-Path $InstallDir "bridge.config.json") -ErrorAction SilentlyContinue
         Remove-Item -Force -Path $InstallDir -ErrorAction SilentlyContinue

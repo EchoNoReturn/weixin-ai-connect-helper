@@ -59,6 +59,8 @@ uninstall() {
     rm -f \
         "${INSTALL_DIR}/wah" \
         "${INSTALL_DIR}/pgh"
+    # Web 控制台静态资源（与可执行文件同级）
+    rm -rf "${INSTALL_DIR}/app"
     if [ "${INSTALL_DIR}" != "$HOME/.wah" ]; then
         rm -f "$HOME/.wah/wah" "$HOME/.wah/pgh"
     fi
