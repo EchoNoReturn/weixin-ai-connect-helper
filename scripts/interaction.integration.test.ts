@@ -22,5 +22,10 @@ for (const autoApprove of [false, true]) test(`ACP subprocess round trip forward
     const result = await agent.prompt("bridge-session", "task", () => {}, createAgentInteraction(broker, owner, "fake", async () => {}));
     expect(JSON.parse(result.text)).toEqual({ permission: { outcome: { outcome: "selected", optionId: autoApprove ? "allow" : "deny" } }, answer: { action: "accept", content: { plan: "B" } } });
     expect(prompts).toHaveLength(autoApprove ? 1 : 2);
+    if (!autoApprove) {
+      expect(prompts[0]).toContain("读取文件内容");
+      expect(prompts[0]).toContain("D:/project/README.md");
+      expect(prompts[0]).toContain("了解项目功能");
+    }
   } finally { broker.close(); await agent.dispose(); }
 });

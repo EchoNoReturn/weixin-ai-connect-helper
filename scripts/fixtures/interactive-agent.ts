@@ -10,6 +10,10 @@ for await (const line of createInterface({ input: process.stdin })) {
   else if (message.method === "session/new") send({ id: message.id, result: { sessionId: `s${++session}` } });
   else if (message.method === "session/prompt") {
     promptId = message.id;
+    send({ method: "session/update", params: { sessionId: `s${session}`, update: {
+      sessionUpdate: "tool_call", toolCallId: "tool", title: "读取项目说明", kind: "read", status: "pending",
+      locations: [{ path: "D:/project/README.md" }], rawInput: { filePath: "D:/project/README.md", description: "了解项目功能" },
+    } } });
     send({ id: "permission", method: "session/request_permission", params: { sessionId: `s${session}`, toolCall: { toolCallId: "tool", title: "测试工具" }, options: [
       { optionId: "allow", kind: "allow_once", name: "允许" }, { optionId: "deny", kind: "reject_once", name: "拒绝" },
     ] } });
