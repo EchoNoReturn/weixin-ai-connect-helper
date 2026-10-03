@@ -89,6 +89,8 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then BIN=./dist/wah.exe; PGH=./dist/pgh.exe; fi
           $BIN --version
           test -x "$PGH"
+          # 打包前先确认 Web 控制台产物存在（缺了就没有前端可发）
+          test -f dist/app/web/dist/index.html
 
       - name: Package (unix)
         if: matrix.goos != 'windows'
@@ -96,12 +98,18 @@ jobs:
           mkdir -p dist/release
           cp dist/wah dist/release/
           cp dist/pgh dist/release/
+          cp -R dist/app dist/release/
           cp plugins.json dist/release/
           cp bridge.config.json dist/release/ 2>/dev/null || true
           chmod +x dist/release/wah dist/release/pgh
           cd dist
           tar -czf ${{ matrix.artifact_name }}.tar.gz -C release .
           mv ${{ matrix.artifact_name }}.tar.gz ../
+          # 校验真实归档：解压后必须能拿到 Web 控制台入口（安装脚本依赖该布局）
+          rm -rf /tmp/verify && mkdir -p /tmp/verify
+          tar -xzf ../${{ matrix.artifact_name }}.tar.gz -C /tmp/verify
+          test -f /tmp/verify/app/web/dist/index.html
+          test -x /tmp/verify/wah && test -x /tmp/verify/pgh
 
       - name: Package (windows)
         if: matrix.goos == 'windows'
@@ -110,10 +118,15 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist/release
           Copy-Item dist/wah.exe dist/release/
           Copy-Item dist/pgh.exe dist/release/
+          Copy-Item -Recurse dist/app dist/release/
           Copy-Item plugins.json dist/release/
           if (Test-Path bridge.config.json) { Copy-Item bridge.config.json dist/release/ }
           cd dist
-          Compress-Archive -Path release/* -DestinationPath ${{ matrix.artifact_name }}.zip
+          Compress-Archive -Path release/* -DestinationPath ${{ matrix.artifact_name }}.zip -Force
+          # 校验真实归档：解压后必须能拿到 Web 控制台入口
+          Expand-Archive -Path ${{ matrix.artifact_name }}.zip -DestinationPath verify -Force
+          if (-not (Test-Path verify/app/web/dist/index.html)) { throw "归档缺少 Web 控制台静态资源 app/web/dist/index.html" }
+          if (-not (Test-Path verify/wah.exe)) { throw "归档缺少 wah.exe" }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
