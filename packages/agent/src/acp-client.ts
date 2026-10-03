@@ -4,8 +4,9 @@ import * as acp from "@agentclientprotocol/sdk";
 import type { AgentConfig } from "@yoyojcoder-weixin-ai/core";
 import { selectPermission } from "./permission.ts";
 import type { AgentInteraction } from "./interaction.ts";
+import { mergeToolCall } from "./tool-call-details.ts";
 
-interface ActiveInteraction { handler: AgentInteraction; signal: AbortSignal }
+interface ActiveInteraction { handler: AgentInteraction; signal: AbortSignal; tools: Map<string, acp.ToolCallUpdate> }
 
 export interface PromptResult {
   text: string;
@@ -62,7 +63,8 @@ export class AcpAgent {
         }
         const active = interactions.get(ctx.params.sessionId);
         if (active && !opts.autoApprove) {
-          return active.handler.permission(ctx.params, AbortSignal.any([ctx.signal, active.signal]));
+          const toolCall = mergeToolCall(active.tools.get(ctx.params.toolCall.toolCallId), ctx.params.toolCall);
+          return active.handler.permission({ ...ctx.params, toolCall }, AbortSignal.any([ctx.signal, active.signal]));
         }
         return { outcome: { outcome: "cancelled" as const } };
       })
@@ -124,7 +126,7 @@ export class AcpAgent {
     const session = await this.getSession(userKey);
     const turn = new AbortController();
     if (interaction) this.interactions.set(session.sessionId, {
-      handler: interaction, signal: AbortSignal.any([turn.signal, this.conn.signal]),
+      handler: interaction, signal: AbortSignal.any([turn.signal, this.conn.signal]), tools: new Map(),
     });
     try {
       let full = "";
@@ -142,6 +144,10 @@ export class AcpAgent {
           break;
         }
         const update = msg.update;
+        if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") {
+          const tools = this.interactions.get(session.sessionId)?.tools;
+          tools?.set(update.toolCallId, mergeToolCall(tools.get(update.toolCallId), update));
+        }
         if (
           update.sessionUpdate === "agent_message_chunk" &&
           update.content.type === "text"
