@@ -1,7 +1,8 @@
 import type { AgentInteraction } from "@yoyojcoder-weixin-ai/agent";
-import type { IncomingMessage } from "@yoyojcoder-weixin-ai/core";
+import type { IncomingMessage, AgentConfig } from "@yoyojcoder-weixin-ai/core";
 import type { ElicitationSchema, ElicitationPropertySchema, ElicitationContentValue, StringPropertySchema, NumberPropertySchema, MultiSelectPropertySchema, EnumOption } from "@agentclientprotocol/sdk";
 import { UserDecisions } from "./user-decisions.ts";
+import { describePermission } from "./permission-description.ts";
 
 function choices(property: ElicitationPropertySchema): Array<{ value: string; label: string }> {
   if (property.type === "string") {
@@ -65,6 +66,7 @@ export function parseField(property: ElicitationPropertySchema, text: string): E
 export function createAgentInteraction(
   decisions: UserDecisions, owner: IncomingMessage, agentId: string,
   send: (text: string) => Promise<void>,
+  agentConfig?: Pick<AgentConfig, "command" | "cwd">,
 ): AgentInteraction {
   return {
     async permission(request, signal) {
@@ -72,11 +74,8 @@ export function createAgentInteraction(
         await send("[需要用户授权] 当前请求—响应渠道不支持等待交互；请通过微信处理，或在本机设置权限策略。");
         return { outcome: { outcome: "cancelled" } };
       }
-      const details = (request.toolCall.content ?? []).flatMap((item) =>
-        item.type === "content" && item.content.type === "text" ? [item.content.text] : [],
-      ).join("\n");
       const descriptions: Record<string, string> = { allow_once: "允许本次", allow_always: "始终允许", reject_once: "拒绝本次", reject_always: "始终拒绝" };
-      const question = `Agent：${agentId}\n权限请求：${request.toolCall.title ?? "工具执行"}\n${details}\n${request.options.map((o, i) => `${i + 1}. ${o.name}（${descriptions[o.kind] ?? o.kind}）`).join("\n")}`;
+      const question = `${describePermission(request.toolCall, agentId, owner.text, agentConfig)}\n\n请选择：\n${request.options.map((o, i) => `${i + 1}. ${o.name}（${descriptions[o.kind] ?? o.kind}）`).join("\n")}`;
       const optionId = await decisions.ask(owner, question, (text) => {
         const named = request.options.filter((o) => o.name === text || descriptions[o.kind] === text);
         const option = /^[1-9]\d*$/.test(text) ? request.options[Number(text) - 1] : named.length === 1 ? named[0] : undefined;

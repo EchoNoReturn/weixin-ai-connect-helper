@@ -98,7 +98,7 @@ export async function startBridge(opts: BridgeOptions = {}) {
           }).then(() => {});
 
         return runAgentTurn(ctx, {
-          interaction: createAgentInteraction(decisions, incoming, ctx.routed.agentId, sendText),
+          interaction: createAgentInteraction(decisions, incoming, ctx.routed.agentId, sendText, agentConfig),
           agent,
           agentConfig,
           // 流式增量仅发往声明支持 streaming 的渠道；其余渠道由 Stage 5 整段发送
