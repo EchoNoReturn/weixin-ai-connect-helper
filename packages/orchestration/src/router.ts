@@ -13,6 +13,8 @@ export class Router {
   constructor(
     private config: BridgeConfig,
     private access?: AccessStore,
+    /** channelId → 渠道账号本人（登录用户）ID；其消息默认已授权 */
+    private owners: ReadonlyMap<string, string> = new Map(),
   ) {}
 
   parseRoute(msg: ParsedMessage): RoutedMessage {
@@ -33,6 +35,12 @@ export class Router {
   }
 
   private isAllowed(msg: ParsedMessage, accessKey: string): boolean {
+    // 登录账号本人（扫码的那个微信号）默认授权：本机即持有凭据，无需再审批；
+    // 但本机显式 revoke 仍然生效，避免“撤销了却没拦住”。
+    if (this.isOwner(msg)) {
+      return this.access?.getStatus(accessKey) !== "revoked";
+    }
+
     if (this.config.allowFrom.length > 0) {
       return this.config.allowFrom.includes(accessKey) || (
         msg.channelId === "weixin-main" && this.config.allowFrom.includes(msg.senderId)
@@ -51,6 +59,11 @@ export class Router {
       );
     }
     return false;
+  }
+
+  private isOwner(msg: ParsedMessage): boolean {
+    const owner = this.owners.get(msg.channelId);
+    return !!owner && owner === msg.senderId;
   }
 
   private parsePrefix(msg: ParsedMessage): { agentId: string; text: string } {

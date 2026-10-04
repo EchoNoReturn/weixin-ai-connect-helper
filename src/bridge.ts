@@ -54,7 +54,15 @@ export async function startBridge(opts: BridgeOptions = {}) {
   health.accountId = channels.find((channel) => channel.platform === "weixin")?.accountId;
   log.info(`渠道就绪: ${channels.map((channel) => `${channel.channelId}(${channel.platform})`).join(", ")}`);
   const accessMgr = new AccessManager();
-  const router = new Router(config, accessMgr);
+  // 渠道账号本人（微信扫码登录用户）默认授权，不需要 allowFrom / wah access approve
+  const owners = new Map<string, string>();
+  for (const channel of channels) {
+    if (channel.ownerId) owners.set(channel.channelId, channel.ownerId);
+  }
+  if (owners.size > 0) {
+    log.info(`账号本人已自动授权: ${[...owners].map(([id, uid]) => `${id}=${uid}`).join(", ")}`);
+  }
+  const router = new Router(config, accessMgr, owners);
   const ctxBuilder = new ContextBuilder();
   const sessionMgr = new SessionManager();
   const procMgr = new ProcessManager(config.agents, { autoApprove: config.autoApprove });

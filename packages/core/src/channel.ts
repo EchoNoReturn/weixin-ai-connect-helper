@@ -64,6 +64,12 @@ export interface ChannelAdapter {
   readonly channelId: ChannelId;
   readonly platform: ChannelPlatform;
   readonly accountId?: string;
+  /**
+   * 渠道账号本人（如微信扫码登录的 userId）。
+   * 该发送者的消息默认视为已授权，不需要 allowFrom 或 wah access approve；
+   * 本机显式 revoke 仍然生效。
+   */
+  readonly ownerId?: string;
   readonly capabilities: Readonly<ChannelCapabilities>;
 
   start(options: ChannelStartOptions): Promise<void>;

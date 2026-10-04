@@ -49,6 +49,8 @@ export class WeixinChannelAdapter implements ChannelAdapter {
   readonly channelId: string;
   readonly platform = "weixin" as const;
   readonly accountId: string;
+  /** 扫码登录的微信用户；其消息默认已授权 */
+  readonly ownerId?: string;
   readonly capabilities = WEIXIN_CAPABILITIES;
 
   private readonly inboundRunner: InboundRunner;
@@ -65,6 +67,7 @@ export class WeixinChannelAdapter implements ChannelAdapter {
   ) {
     this.channelId = options.channelId ?? "weixin-main";
     this.accountId = creds.accountId;
+    this.ownerId = creds.userId;
     this.inboundRunner = options.inboundRunner ?? runInboundLoop;
     this.sender = options.sender ?? new WeixinOutbound(creds);
     this.contextStore = options.contextStore ?? {
