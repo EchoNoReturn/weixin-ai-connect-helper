@@ -169,6 +169,13 @@ wah access approve '<user-id>@im.wechat'
 wah access revoke '<user-id>@im.wechat'
 ```
 
+访问控制规则：
+
+- **扫码登录的那个微信号（账号本人）默认已授权**，登录后直接可用，无需 `wah access approve`；本机就是凭据持有者，再审批一次是多余的。
+- 其他微信用户默认进入 pending，需在本机执行 `wah access approve '<user-id>@im.wechat'` 后才能使用。
+- `allowFrom` 非空时只放行白名单内的用户（账号本人仍然可）；显式 `wah access revoke` 对账号本人同样生效，方便临时封停。
+- Webhook 渠道没有“账号本人”概念，仍需 `allowFrom` 或审批（审批键为 `<channel-id>:<sender-id>`）。
+
 ## 在微信中使用
 
 给绑定的 bot 发消息：
@@ -228,7 +235,7 @@ Agent：opencode
 
 ```jsonc
 {
-  "allowFrom": [],               // 微信用户 ID 白名单；空=使用本机 access 审批记录
+  "allowFrom": [],               // 微信用户 ID 白名单；空=除账号本人外，其余用户走本机 access 审批记录
   "defaultAgent": "opencode",    // 无前缀消息的默认 agent
   "agents": {
     "opencode": {

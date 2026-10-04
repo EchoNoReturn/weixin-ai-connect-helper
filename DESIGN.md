@@ -549,7 +549,7 @@ CREATE INDEX idx_access_users_status ON access_users(status, updated_at);
 
 ```jsonc
 {
-  "allowFrom": [],               // 空=使用本机 access 审批记录
+  "allowFrom": [],               // 空=账号本人自动授权，其他用户走本机 access 审批
   "defaultAgent": "opencode",
   "agents": {
     "opencode": { "command": "opencode", "args": ["acp"], "cwd": "." }
@@ -697,7 +697,7 @@ transport + orchestration + agent ← src/index.ts（主进程组装管道）
 
 ```jsonc
 {
-  "allowFrom": [],               // 微信用户ID白名单，空=使用本机 access 审批记录
+  "allowFrom": [],               // 微信用户ID白名单，空=账号本人自动授权 + 本机审批
   "defaultAgent": "opencode",
   "agents": {
     "opencode": {
@@ -744,7 +744,7 @@ bun run dev:web                    # Web 控制台开发模式（Vite dev server
 
 - `allowFrom` 白名单是安全边界，agent 具有 shell 级别访问权限
 - Web 控制台默认只监听 localhost（`127.0.0.1`）
-- `allowFrom` 为空时，未知用户只会进入 pending，必须通过本机 CLI 审批
+- 微信扫码登录的账号本人（`ChannelAdapter.ownerId`）默认已授权，不会进入 pending；其余未知用户进入 pending，必须通过本机 CLI 审批；显式 revoke 对本人同样生效
 - `autoApprove` 默认关闭；开启后 agent 工具调用无需确认
 
 ### 9.4 contextToken

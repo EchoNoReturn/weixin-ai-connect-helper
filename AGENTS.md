@@ -52,7 +52,7 @@ bridge.config.json    ← optional config (gitignored)
 
 ```jsonc
 {
-  "allowFrom": [],               // WeChat user IDs; empty = require local access approval
+  "allowFrom": [],               // WeChat user IDs; empty = owner is auto-authorized, others need local approval
   "defaultAgent": "opencode",
   "agents": {
     "opencode": { "command": "opencode", "args": ["acp"], "cwd": "." }
@@ -80,5 +80,5 @@ bridge.config.json    ← optional config (gitignored)
 ## Safety
 
 - `allowFrom` whitelist is the security boundary — agent has shell-level access.
-- When `allowFrom` is empty, unknown senders are recorded as pending and must be approved locally with `wah access approve <user-id>`.
+- The WeChat account owner (the userId from QR login, surfaced as `ChannelAdapter.ownerId`) is implicitly authorized; they are never recorded as pending. Other senders are recorded as pending and must be approved locally with `wah access approve <user-id>`. An explicit `wah access revoke` still blocks the owner.
 - `autoApprove` defaults to `false`; enabling it means agent tool calls execute without confirmation.
